@@ -1,0 +1,435 @@
+;; prize-draw-worstcase-testing.repl
+;;
+;; The unit suite proves the rules. It does not prove the module survives its
+;; own declared limits: the largest draw it ever executes has THREE tiers, and
+;; it measures no gas anywhere. A draw at MAX-TIERS pays ten winners plus two
+;; crank shares (record, draw) plus the operator fee, each outflow with its own
+;; managed-capability install — and that transaction had never been run.
+;;
+;; This file runs the module at its declared ceilings and records what every
+;; transaction of a round actually costs, so the 150,000 gas limit is a
+;; measured fact and not a hope. A raffle module that can be created but whose
+;; draw cannot be mined would be a permanent, unfixable trap once frozen.
+;;
+;; Two draw shapes are measured, because "worst" is two different things:
+;;   round 1 — ALIASING: the recorder is a winner and the drawer is another
+;;             winner. The most aggregation `merge-payee` ever does, and the
+;;             shape that once aborted a draw forever (two installs to one
+;;             account collide). Eleven distinct transfers.
+;;   round 2 — DISTINCT: the recorder and the drawer hold no ticket. The most
+;;             transfers the draw can ever perform: thirteen.
+;; Then the other transactions of a round at their own ceilings: a later buy of
+;; MAX-TICKETS-PER-TX, the operator's schedule-round, the permissionless
+;; open-draw, and the escape with its dust sweep plus one claim.
+;;
+;;   pact pact/tests/prize-draw-worstcase-testing.repl
+
+(load "prize-draw-test-init.repl")
+
+(begin-tx)
+(env-data
+  { "w01": { "keys": ["0000000000000000000000000000000000000000000000000000000000000001"], "pred": "keys-all" }
+  , "w02": { "keys": ["0000000000000000000000000000000000000000000000000000000000000002"], "pred": "keys-all" }
+  , "w03": { "keys": ["0000000000000000000000000000000000000000000000000000000000000003"], "pred": "keys-all" }
+  , "w04": { "keys": ["0000000000000000000000000000000000000000000000000000000000000004"], "pred": "keys-all" }
+  , "w05": { "keys": ["0000000000000000000000000000000000000000000000000000000000000005"], "pred": "keys-all" }
+  , "w06": { "keys": ["0000000000000000000000000000000000000000000000000000000000000006"], "pred": "keys-all" }
+  , "w07": { "keys": ["0000000000000000000000000000000000000000000000000000000000000007"], "pred": "keys-all" }
+  , "w08": { "keys": ["0000000000000000000000000000000000000000000000000000000000000008"], "pred": "keys-all" }
+  , "w09": { "keys": ["0000000000000000000000000000000000000000000000000000000000000009"], "pred": "keys-all" }
+  , "w10": { "keys": ["000000000000000000000000000000000000000000000000000000000000000a"], "pred": "keys-all" }
+  , "rec": { "keys": ["000000000000000000000000000000000000000000000000000000000000000b"], "pred": "keys-all" }
+  , "drw": { "keys": ["000000000000000000000000000000000000000000000000000000000000000c"], "pred": "keys-all" }
+  })
+(test-capability (coin.COINBASE))
+(coin.coinbase "k:0000000000000000000000000000000000000000000000000000000000000001" (read-keyset "w01") 100.0)
+(coin.coinbase "k:0000000000000000000000000000000000000000000000000000000000000002" (read-keyset "w02") 100.0)
+(coin.coinbase "k:0000000000000000000000000000000000000000000000000000000000000003" (read-keyset "w03") 100.0)
+(coin.coinbase "k:0000000000000000000000000000000000000000000000000000000000000004" (read-keyset "w04") 100.0)
+(coin.coinbase "k:0000000000000000000000000000000000000000000000000000000000000005" (read-keyset "w05") 100.0)
+(coin.coinbase "k:0000000000000000000000000000000000000000000000000000000000000006" (read-keyset "w06") 100.0)
+(coin.coinbase "k:0000000000000000000000000000000000000000000000000000000000000007" (read-keyset "w07") 100.0)
+(coin.coinbase "k:0000000000000000000000000000000000000000000000000000000000000008" (read-keyset "w08") 100.0)
+(coin.coinbase "k:0000000000000000000000000000000000000000000000000000000000000009" (read-keyset "w09") 100.0)
+(coin.coinbase "k:000000000000000000000000000000000000000000000000000000000000000a" (read-keyset "w10") 100.0)
+;; the non-buying recorder and drawer of round 2
+(coin.coinbase "k:000000000000000000000000000000000000000000000000000000000000000b" (read-keyset "rec") 1.0)
+(coin.coinbase "k:000000000000000000000000000000000000000000000000000000000000000c" (read-keyset "drw") 1.0)
+(commit-tx)
+
+(begin-tx)
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"
+            , "caps": [ (smartpacts.prize-draw.GOVERNANCE) ] } ])
+(smartpacts.prize-draw.initialize "draw-revenue")
+(commit-tx)
+(env-sigs [])
+
+;; The gas meter is switched on here and reset before each measured
+;; transaction, so every number below is that transaction's cost alone.
+(env-gasmodel "table")
+(env-gaslimit 150000)
+
+;; ---------------------------------------------------------------- the raffle
+;; MAX-TIERS is 10. Ten equal tenths, so every tier is filled and every winner
+;; is a DISTINCT account. Weights [3 1] so the two crank shares are told apart.
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(expect "WORST-1 a raffle at MAX-TIERS is accepted"
+  "raffle max created"
+  (smartpacts.prize-draw.create-raffle "max" 1.0 0.05
+    [0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1] 0 false 0.0 0 200.0 0.20 [3 1]))
+(commit-tx)
+
+;; ---------------------------------------------------------------- the calendar
+;; A round sells and draws by calendar instants the operator names for it, and
+;; the FIRST TICKET freezes them. schedule-round is an operator transaction on
+;; every round, so it is measured too.
+(begin-tx)
+(env-chain-data { "block-height": 200, "block-time": (time "2026-09-15T12:00:00Z") })
+(env-gas 0)
+(expect "WORST-1a the operator names the round's calendar: sells Sep 16 00:00 to Oct 15 06:00, draws at Oct 15 14:00"
+  "raffle max next round: sells 2026-09-16T00:00:00Z to 2026-10-15T06:00:00Z, draws at 2026-10-15T14:00:00Z"
+  (smartpacts.prize-draw.schedule-round "max"
+    (time "2026-09-16T00:00:00Z") (time "2026-10-15T06:00:00Z") (time "2026-10-15T14:00:00Z")))
+(let ((used (env-gas)))
+  (print (format "WORST-CASE SCHEDULE-ROUND GAS: {} of 150000" [used]))
+  (expect-that "WORST-1a2 schedule-round fits the block gas limit"
+    (lambda (g:integer) (< g 150000)) used))
+(commit-tx)
+(env-sigs [])
+
+;; ---------------------------------------------------------------- the first ticket
+;; A round exists from its first ticket: this buy creates the round row, freezes
+;; the terms and the calendar, consumes the schedule and sells one ticket — the
+;; most a buy ever does per ticket, so it is measured.
+(begin-tx)
+(env-chain-data { "block-height": 200, "block-time": (time "2026-09-16T00:00:00Z") })
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(env-gas 0)
+(expect "WORST-1b the first ticket creates the round and freezes its calendar"
+  "bought 1 ticket(s) in max round 1"
+  (smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000001" 1 []))
+(let ((used (env-gas)))
+  (print (format "WORST-CASE FIRST-BUY GAS (creates the round): {} of 150000" [used]))
+  (expect-that "WORST-1b2 the first buy fits the block gas limit"
+    (lambda (g:integer) (< g 150000)) used))
+(expect "WORST-1c the round froze the calendar and the schedule is consumed"
+  { "opens-at": (time "2026-09-16T00:00:00Z"), "closes-at": (time "2026-10-15T06:00:00Z")
+  , "draws-at": (time "2026-10-15T14:00:00Z"), "decide-height": 0, "next": (time "1970-01-01T00:00:00Z") }
+  (let ((r (smartpacts.prize-draw.get-round "max" 1)) (g (smartpacts.prize-draw.get-raffle "max")))
+    { "opens-at": (at 'opens-at r), "closes-at": (at 'closes-at r), "draws-at": (at 'draws-at r)
+    , "decide-height": (at 'decide-height r), "next": (at 'next-opens-at g) }))
+(commit-tx)
+(env-sigs [])
+
+;; nine more distinct buyers, one ticket each, inside the sales window
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000002"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000002" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000003"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000003" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000003" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000004"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000004" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000004" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000005"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000005" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000005" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000006"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000006" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000006" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000007"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000007" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000007" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000008"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000008" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000008" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000009"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000009" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000009" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "000000000000000000000000000000000000000000000000000000000000000a"
+            , "caps": [ (coin.TRANSFER "k:000000000000000000000000000000000000000000000000000000000000000a" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:000000000000000000000000000000000000000000000000000000000000000a" 1 [])
+(commit-tx)
+(env-sigs [])
+
+(begin-tx)
+(expect "WORST-2 ten tickets sold into the round" 10
+  (at 'tickets (smartpacts.prize-draw.get-round "max" 1)))
+(commit-tx)
+
+;; ---------------------------------------------------------------- the draw opens
+;; At the draw instant anyone fixes the candidate blocks as the next ones on
+;; the chain: from block 220 they are 222..224. Measured: this is the one
+;; permissionless crank every round needs before it can be recorded.
+(begin-tx)
+(env-chain-data { "block-height": 220, "block-time": (time "2026-10-15T14:00:00Z"), "sender": "k:anyone" })
+(env-gas 0)
+(expect "WORST-2a at the draw instant the draw is opened from block 220"
+  "max round 1: candidate blocks 222 to 224"
+  (smartpacts.prize-draw.open-draw "max" 1))
+(let ((used (env-gas)))
+  (print (format "WORST-CASE OPEN-DRAW GAS: {} of 150000" [used]))
+  (expect-that "WORST-2a2 open-draw fits the block gas limit"
+    (lambda (g:integer) (< g 150000)) used))
+(expect "WORST-2b the round pinned block 222" 222
+  (at 'decide-height (smartpacts.prize-draw.get-round "max" 1)))
+(commit-tx)
+
+;; ---------------------------------------------------------------- the record
+;; The FIRST BUYER records block 222 from block 223: the recorder is a winner
+;; (every ticket wins a tier here). That is the only step between the opened
+;; draw and the draw itself — there is no reveal and no confirmation wait.
+(begin-tx)
+(env-chain-data { "block-height": 223
+                , "prev-block-hash": "wG-8Zq2vQd1kXcP0mNbYtR7sHjLuEaFdCiOx3ZyKpTs"
+                , "sender": "k:0000000000000000000000000000000000000000000000000000000000000001" })
+(expect "WORST-2c the deciding block is recorded by a buyer" "recorded" (free.block-history.attest))
+(expect "WORST-2d and the round is decidable the moment it is" true (smartpacts.prize-draw.decidable "max" 1))
+(commit-tx)
+
+;; ------------------------------------------------------------------ the draw
+;; The measurement. env-gas is reset immediately before the draw so the number
+;; is the DRAW's cost alone, not the fixture's. The payee is the SECOND BUYER,
+;; another winner: recorder and drawer both alias winners, so the ten winners
+;; and the revenue account are 11 distinct accounts and the two crank shares
+;; are aggregated into their winners' transfers by merge-payee.
+(begin-tx)
+(env-chain-data { "block-height": 400 })
+(env-events true)
+(env-gas 0)
+(let ((r (smartpacts.prize-draw.draw "max" 1
+           "k:0000000000000000000000000000000000000000000000000000000000000002")))
+  (print (format "WORST-CASE DRAW (aliasing): {}" [r])))
+(let ((used (env-gas)))
+  (print (format "WORST-CASE DRAW GAS at MAX-TIERS, 10 distinct winners, recorder and drawer both winners: {} of 150000" [used]))
+  (expect-that "WORST-3 the aliasing draw at MAX-TIERS fits the block gas limit"
+    (lambda (g:integer) (< g 150000)) used))
+(expect "WORST-3b eleven distinct pool transfers were performed — the two crank shares aggregated into their winners'"
+  11 (length (distinct
+               (map (lambda (e:object) (at 1 (at 'params e)))
+                    (filter (lambda (e:object) (= (at 'name e) "coin.TRANSFER")) (env-events true))))))
+(commit-tx)
+
+(begin-tx)
+(let ((rd (smartpacts.prize-draw.get-round "max" 1)))
+  (expect "WORST-4 the round settled" "drawn" (at 'state rd))
+  (expect "WORST-5 all ten tiers paid a winner" 10 (length (at 'ranks rd)))
+  (expect "WORST-6 ten distinct winning accounts were paid" 10
+    (length (distinct (at 'accounts rd)))))
+(commit-tx)
+
+;; Money conservation at the ceiling: the pool must be empty to the last
+;; satoshi. A rounding residue that is invisible at three tiers is exactly the
+;; kind of thing that only shows up at ten.
+(begin-tx)
+(expect "WORST-7 the pool is settled to zero — no residue stranded at MAX-TIERS"
+  0.0
+  (coin.get-balance (smartpacts.prize-draw.pool-account "max")))
+;; 10.0 sales, 0.5 fee, 0.1 bounty pool split [3 1]: 0.075 to the recorder,
+;; 0.025 to the drawer; each also staked 1.0 and won 0.95.
+(expect "WORST-8 the TWO cranks split the bounty pool by the round's FROZEN weights [3 1], on top of their prizes"
+  { "recorder": 100.025, "drawer": 99.975, "another winner": 99.95 }
+  { "recorder":       (coin.get-balance "k:0000000000000000000000000000000000000000000000000000000000000001")
+  , "drawer":         (coin.get-balance "k:0000000000000000000000000000000000000000000000000000000000000002")
+  , "another winner": (coin.get-balance "k:0000000000000000000000000000000000000000000000000000000000000003") })
+(expect "WORST-8b the two shares are the whole bounty pool — nothing is lost to the rounding"
+  0.1 (+ 0.075 0.025))
+(expect "WORST-9 the revenue account received the fee net of the bounty pool: 0.5 - 0.1" 0.4
+  (coin.get-balance "draw-revenue"))
+(commit-tx)
+
+;; ================================================================ round 2: DISTINCT cranks
+;; The most transfers a draw can perform: ten distinct winners plus a recorder
+;; and a drawer who hold no ticket, plus revenue — thirteen.
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(env-chain-data { "block-height": 300, "block-time": (time "2026-10-16T00:00:00Z") })
+(smartpacts.prize-draw.schedule-round "max"
+  (time "2026-10-17T00:00:00Z") (time "2026-10-17T01:00:00Z") (time "2026-10-17T01:00:00Z"))
+(commit-tx)
+(env-sigs [])
+(env-chain-data { "block-height": 301, "block-time": (time "2026-10-17T00:30:00Z") })
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(expect "WORST-2R the first ticket opens round 2" "bought 1 ticket(s) in max round 2"
+  (smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000001" 1 []))
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000002"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000002" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000003"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000003" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000003" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000004"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000004" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000004" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000005"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000005" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000005" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000006"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000006" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000006" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000007"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000007" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000007" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000008"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000008" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000008" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000009"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000009" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000009" 1 [])
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "000000000000000000000000000000000000000000000000000000000000000a"
+            , "caps": [ (coin.TRANSFER "k:000000000000000000000000000000000000000000000000000000000000000a" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
+(smartpacts.prize-draw.buy "max" "k:000000000000000000000000000000000000000000000000000000000000000a" 1 [])
+(commit-tx)
+(env-sigs [])
+(begin-tx)
+(env-chain-data { "block-height": 320, "block-time": (time "2026-10-17T01:00:00Z"), "sender": "k:anyone" })
+(expect "WORST-2R2 round 2's draw opens: candidates 322 to 324" "max round 2: candidate blocks 322 to 324"
+  (smartpacts.prize-draw.open-draw "max" 2))
+(commit-tx)
+(begin-tx)
+(env-chain-data { "block-height": 323
+                , "prev-block-hash": "Rt5nDk2wXa9LpQzV0cBhYeMu7JsGiKo3TfEr1NxWq8C"
+                , "sender": "k:000000000000000000000000000000000000000000000000000000000000000b" })
+(expect "WORST-2R3 the deciding block is recorded by a non-buyer" "recorded" (free.block-history.attest))
+(env-events true)
+(env-gas 0)
+(let ((r (smartpacts.prize-draw.draw "max" 2
+           "k:000000000000000000000000000000000000000000000000000000000000000c")))
+  (print (format "WORST-CASE DRAW (distinct cranks): {}" [r])))
+(let ((used (env-gas)))
+  (print (format "WORST-CASE DRAW GAS at MAX-TIERS, 10 distinct winners + 2 distinct cranks + revenue: {} of 150000" [used]))
+  (expect-that "WORST-3d the most-transfers draw fits the block gas limit"
+    (lambda (g:integer) (< g 150000)) used))
+(expect "WORST-3e thirteen distinct pool transfers were performed — nothing aggregated"
+  13 (length (distinct
+               (map (lambda (e:object) (at 1 (at 'params e)))
+                    (filter (lambda (e:object) (= (at 'name e) "coin.TRANSFER")) (env-events true))))))
+(expect "WORST-3f the pool is settled to zero after both rounds" 0.0
+  (coin.get-balance (smartpacts.prize-draw.pool-account "max")))
+(expect "WORST-3g the non-buying cranks got exactly their shares: 0.075 and 0.025"
+  { "recorder": 1.075, "drawer": 1.025 }
+  { "recorder": (coin.get-balance "k:000000000000000000000000000000000000000000000000000000000000000b")
+  , "drawer":   (coin.get-balance "k:000000000000000000000000000000000000000000000000000000000000000c") })
+(commit-tx)
+
+;; ================================================================ the other ceilings
+;; A raffle with a bonus, so the escape has dust to sweep: a first ticket, then
+;; a later buy of MAX-TICKETS-PER-TX (50) into the same round, then the round's
+;; draw is never opened and it escapes a day after its draw instant.
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] }
+          , { "key": "5ea1000000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:5ea1000000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "bulk") 1.0) ] } ])
+(env-chain-data { "block-height": 350, "block-time": (time "2026-10-17T12:00:00Z") })
+(smartpacts.prize-draw.create-raffle "bulk" 1.0 0.05 [1.0] 0 false 10.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.schedule-round "bulk"
+  (time "2026-10-18T00:00:00Z") (time "2026-10-19T00:00:00Z") (time "2026-10-19T06:00:00Z"))
+(smartpacts.prize-draw.seed-raffle "bulk" "k:5ea1000000000000000000000000000000000000000000000000000000000001" 1.0)
+(commit-tx)
+(env-sigs [])
+(begin-tx)
+(env-chain-data { "block-height": 360, "block-time": (time "2026-10-18T00:00:00Z") })
+(env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000003"
+            , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000003" (smartpacts.prize-draw.pool-account "bulk") 1.0) ] } ])
+(expect "WORST-BUY-1 the first ticket opens the round and binds the bonus" "bought 1 ticket(s) in bulk round 1"
+  (smartpacts.prize-draw.buy "bulk" "k:0000000000000000000000000000000000000000000000000000000000000003" 1 []))
+(commit-tx)
+(begin-tx)
+(env-chain-data { "block-height": 361, "block-time": (time "2026-10-18T12:00:00Z") })
+(env-sigs [ { "key": "5ea1000000000000000000000000000000000000000000000000000000000002"
+            , "caps": [ (coin.TRANSFER "k:5ea1000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "bulk") 50.0) ] } ])
+(env-gas 0)
+(expect "WORST-BUY-2 a later buy of MAX-TICKETS-PER-TX joins the round" "bought 50 ticket(s) in bulk round 1"
+  (smartpacts.prize-draw.buy "bulk" "k:5ea1000000000000000000000000000000000000000000000000000000000002" 50 []))
+(let ((used (env-gas)))
+  (print (format "WORST-CASE LATER-BUY GAS (50 tickets): {} of 150000" [used]))
+  (expect-that "WORST-BUY-2b the largest buy fits the block gas limit"
+    (lambda (g:integer) (< g 150000)) used))
+(expect-failure "WORST-BUY-3 and 51 in one transaction is refused" "count must be 1..50"
+  (smartpacts.prize-draw.buy "bulk" "k:5ea1000000000000000000000000000000000000000000000000000000000002" 51 []))
+(commit-tx)
+(env-sigs [])
+
+;; nobody opens the draw: exactly the grace is still open-able, a second more escapes
+(begin-tx)
+(env-chain-data { "block-height": 400, "block-time": (time "2026-10-20T06:00:00Z") })
+(expect-failure "WORST-ESC-0 at exactly the grace the round can still be opened, not escaped"
+  "the draw has not been opened — anyone may open it"
+  (smartpacts.prize-draw.escape "bulk" 1))
+(rollback-tx)
+(begin-tx)
+(env-chain-data { "block-height": 401, "block-time": (time "2026-10-20T06:00:01Z") })
+(env-gas 0)
+(expect "WORST-ESC-1 the round escapes: the draw was never opened"
+  "bulk round 1 escaped: the draw was never opened"
+  (smartpacts.prize-draw.escape "bulk" 1))
+(let ((used (env-gas)))
+  (print (format "WORST-CASE ESCAPE GAS (51 tickets, dust swept): {} of 150000" [used]))
+  (expect-that "WORST-ESC-1b the escape fits the block gas limit"
+    (lambda (g:integer) (< g 150000)) used))
+;; 1.0 bonus over 51 tickets: 0.019607843137 per ticket, 0.000000000013 of dust to
+;; revenue, on top of the 0.4 fee each of the two max rounds already paid there
+(expect "WORST-ESC-2 the per-ticket bonus share and the dust"
+  { "unit": 0.019607843137, "revenue": 0.800000000013 }
+  { "unit": (at 'escape-unit (smartpacts.prize-draw.get-round "bulk" 1))
+  , "revenue": (coin.get-balance "draw-revenue") })
+(env-gas 0)
+(expect "WORST-ESC-3 the 50-ticket holder is refunded stake plus bonus share in one transfer"
+  "paid 50.98039215685 to k:5ea1000000000000000000000000000000000000000000000000000000000002"
+  (smartpacts.prize-draw.claim-escape "bulk" 1 "k:5ea1000000000000000000000000000000000000000000000000000000000002"))
+(let ((used (env-gas)))
+  (print (format "WORST-CASE CLAIM-ESCAPE GAS: {} of 150000" [used]))
+  (expect-that "WORST-ESC-3b the claim fits the block gas limit"
+    (lambda (g:integer) (< g 150000)) used))
+(expect "WORST-ESC-4 the first buyer is refunded too"
+  "paid 1.019607843137 to k:0000000000000000000000000000000000000000000000000000000000000003"
+  (smartpacts.prize-draw.claim-escape "bulk" 1 "k:0000000000000000000000000000000000000000000000000000000000000003"))
+(expect "WORST-ESC-5 the pool is settled: nothing owed, nothing pending, nothing bound, books ok"
+  { "ok": true, "owed": 0.0, "pending": 0.0, "bound": 0.0, "balance": 0.0 }
+  (let ((p (smartpacts.prize-draw.pool-status "bulk")))
+    { "ok": (at 'ok p), "owed": (at 'owed p), "pending": (at 'pending p), "bound": (at 'bound p), "balance": (at 'balance p) }))
+(commit-tx)
+
+(print "prize-draw worst-case suite complete")

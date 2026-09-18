@@ -1,0 +1,785 @@
+;; prize-draw-vision-testing.repl
+;;
+;; Requirements the FOUNDER stated, each pinned by a test that goes RED if the
+;; requirement is violated. This file exists because of a specific failure mode:
+;; an audit asks "is it safe and correct", never "is it what was asked for", and
+;; a test suite encodes the implementer's belief — so a wrong belief produces a
+;; green suite forever.
+;;
+;; It is not a duplicate of the unit suite. Every test here was written after a
+;; planted mutation SURVIVED the unit suite, or pins a vision clause the unit
+;; suite never states.
+;;
+;; The draw is BLOCK-ONLY: there is no sealer, no secret, no bond and no reveal.
+;; A round exists from its FIRST TICKET, which freezes the terms and the
+;; calendar; at the draw instant anyone opens the draw, the next blocks are the
+;; candidates, the lowest recorded one decides, and the draw is a pure function
+;; of the round key and that block's hash.
+;;
+;;   pact pact/tests/prize-draw-vision-testing.repl
+
+(load "prize-draw-test-init.repl")
+
+(begin-tx)
+(env-data
+  { "v1": { "keys": ["1111111111111111111111111111111111111111111111111111111111111111"], "pred": "keys-all" }
+  , "v2": { "keys": ["2222222222222222222222222222222222222222222222222222222222222222"], "pred": "keys-all" } })
+(test-capability (coin.COINBASE))
+(coin.coinbase "k:1111111111111111111111111111111111111111111111111111111111111111" (read-keyset "v1") 1000.0)
+(coin.coinbase "k:2222222222222222222222222222222222222222222222222222222222222222" (read-keyset "v2") 1000.0)
+(commit-tx)
+
+(begin-tx)
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"
+            , "caps": [ (smartpacts.prize-draw.GOVERNANCE) ] } ])
+(smartpacts.prize-draw.initialize "draw-revenue")
+(commit-tx)
+(env-sigs [])
+
+;; ===========================================================================
+;; FOUNDER: "it should be modular, we should be able to change it. it should
+;;           not be able to change for open raffles."
+;;
+;; The unit suite proves the round ROW is untouched by a mid-round set-terms.
+;; It does NOT prove the SETTLEMENT uses the frozen terms, because its fixture
+;; restores the original rake before every draw — so the live row and the
+;; frozen row agree by the time anything is paid.
+;;
+;; Mutation M-RAKE, run 2026-09-07: change `draw` to read the rake from the
+;; live `raffles` row instead of the frozen `rounds` row. The unit suite stayed
+;; GREEN (exit 0, zero FAILUREs). An operator could therefore have raised the
+;; fee on a round that was already selling, and nothing would have caught it.
+;;
+;; The tests below leave the raised fee IN PLACE across the draw. That is the
+;; whole point: the live row and the frozen row must DISAGREE at settlement.
+;; ===========================================================================
+
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(smartpacts.prize-draw.create-raffle "frozen" 10.0 0.05 [1.0] 0 false 0.0 0 200.0 0.20 [1 1])
+(commit-tx)
+(env-sigs [])
+
+;; ten tickets at 10.0 => sales 100.0, frozen rake 0.05 => fee 5.0, fund 95.0
+;; A round sells and draws by CALENDAR instants the operator names for it:
+;; sells Sep 16 00:00 to Oct 15 06:00, draws at Oct 15 14:00. The FIRST TICKET
+;; is what creates the round and freezes those instants with every other term,
+;; so it is the first ticket that this whole section's "frozen at open" claim
+;; rests on. In the REPL the clock and the height are independent: the clock
+;; drives sales and the draw instant, the heights drive the candidate blocks.
+(begin-tx)
+(env-chain-data { "block-height": 500, "block-time": (time "2026-09-15T12:00:00Z") })
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(smartpacts.prize-draw.schedule-round "frozen"
+  (time "2026-09-16T00:00:00Z") (time "2026-10-15T06:00:00Z") (time "2026-10-15T14:00:00Z"))
+(expect "VISION-0 no round exists before the first ticket — a schedule is not a round"
+  "" (at 'current (smartpacts.prize-draw.get-raffle "frozen")))
+(commit-tx)
+(env-sigs [])
+
+(begin-tx)
+(env-chain-data { "block-height": 500, "block-time": (time "2026-09-16T00:00:00Z") })
+(env-sigs [ { "key": "1111111111111111111111111111111111111111111111111111111111111111"
+            , "caps": [ (coin.TRANSFER "k:1111111111111111111111111111111111111111111111111111111111111111"
+                                       (smartpacts.prize-draw.pool-account "frozen") 100.0) ] } ])
+(expect "VISION-0b the first ticket creates round 1"
+  "bought 10 ticket(s) in frozen round 1"
+  (smartpacts.prize-draw.buy "frozen" "k:1111111111111111111111111111111111111111111111111111111111111111" 10 []))
+(commit-tx)
+(env-sigs [])
+
+(begin-tx)
+(expect "VISION-1a the round froze the rake it opened with" 0.05
+  (at 'rake (smartpacts.prize-draw.get-round "frozen" 1)))
+(expect "VISION-1b the round froze the price it opened with" 10.0
+  (at 'price (smartpacts.prize-draw.get-round "frozen" 1)))
+(expect "VISION-1c the round froze the instants it opened with, and no deciding block exists before its draw instant"
+  { "opens-at": (time "2026-09-16T00:00:00Z"), "closes-at": (time "2026-10-15T06:00:00Z")
+  , "draws-at": (time "2026-10-15T14:00:00Z"), "decide-height": 0 }
+  (let ((r (smartpacts.prize-draw.get-round "frozen" 1)))
+    { "opens-at": (at 'opens-at r), "closes-at": (at 'closes-at r)
+    , "draws-at": (at 'draws-at r), "decide-height": (at 'decide-height r) }))
+(commit-tx)
+
+;; The operator raises the fee to 90% AND names a different, shorter calendar
+;; for the NEXT round WHILE this round is selling, and — unlike the unit suite —
+;; never puts either back. The next round cannot open before this one closes
+;; (no ticket could ever start it), so the calendar it names starts after
+;; Oct 15 06:00 but draws EARLIER than this round does.
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(expect "VISION-2 the operator CAN change future terms — the raffle is modular"
+  "raffle frozen re-termed for future rounds"
+  (smartpacts.prize-draw.set-terms "frozen" 99.0 0.90 [1.0] 0 0.0 0 200.0 0.20 [1 1]))
+(expect-failure "VISION-2b but CANNOT name a next round that opens while this one still sells — no ticket could ever start it"
+  "the next round cannot open before the current one closes at 2026-10-15T06:00:00Z"
+  (smartpacts.prize-draw.schedule-round "frozen"
+    (time "2026-09-16T01:00:00Z") (time "2026-09-16T02:00:00Z") (time "2026-09-16T02:00:00Z")))
+(expect "VISION-2c and CAN name a shorter calendar for the NEXT round, drawing before this one does"
+  "raffle frozen next round: sells 2026-10-15T07:00:00Z to 2026-10-15T08:00:00Z, draws at 2026-10-15T08:00:00Z"
+  (smartpacts.prize-draw.schedule-round "frozen"
+    (time "2026-10-15T07:00:00Z") (time "2026-10-15T08:00:00Z") (time "2026-10-15T08:00:00Z")))
+(commit-tx)
+(env-sigs [])
+
+(begin-tx)
+(expect "VISION-3 the LIVE raffle row now carries the raised fee and the next calendar"
+  { "rake": 0.90, "next-opens-at": (time "2026-10-15T07:00:00Z"), "next-draws-at": (time "2026-10-15T08:00:00Z") }
+  (let ((g (smartpacts.prize-draw.get-raffle "frozen")))
+    { "rake": (at 'rake g), "next-opens-at": (at 'next-opens-at g), "next-draws-at": (at 'next-draws-at g) }))
+(expect "VISION-4 the OPEN round still carries the fee it opened with" 0.05
+  (at 'rake (smartpacts.prize-draw.get-round "frozen" 1)))
+(expect "VISION-4b and still sells and draws on the instants it opened with — an earlier calendar cannot pull the draw forward"
+  { "closes-at": (time "2026-10-15T06:00:00Z"), "draws-at": (time "2026-10-15T14:00:00Z"), "decide-height": 0 }
+  (let ((r (smartpacts.prize-draw.get-round "frozen" 1)))
+    { "closes-at": (at 'closes-at r), "draws-at": (at 'draws-at r), "decide-height": (at 'decide-height r) }))
+(commit-tx)
+
+;; The earlier draw instant the operator just named passes — this round is
+;; closed by then, awaiting its own draw. It belongs to the NEXT round, so it
+;; opens nothing on this one.
+(begin-tx)
+(env-chain-data { "block-height": 510, "block-time": (time "2026-10-15T08:00:00Z") })
+(expect-failure "VISION-4b2 at the earlier instant named for the next round, THIS round's draw does not open"
+  "the draw opens at 2026-10-15T14:00:00Z"
+  (smartpacts.prize-draw.open-draw "frozen" 1))
+(rollback-tx)
+
+;; ===========================================================================
+;; FOUNDER (2026-09-15): the block alone decides. Nothing about a winner exists
+;; before the draw instant: no candidate, no preview, no decidable. At the
+;; instant, anyone opens the draw and the NEXT blocks are the candidates; the
+;; LOWEST recorded one decides; the draw is a pure function of the round key and
+;; that block's hash; and a settled round's result equals what `preview`
+;; returned to anyone who asked before the draw was sent.
+;;
+;; Each clause is a NAMED test that goes RED if it is violated. Every one of
+;; them is sensitive to the height or the clock of the transaction it pins.
+;; ===========================================================================
+
+;; ---- before the draw instant: NOTHING ---------------------------------------
+;; Sales are closed and the draw instant is a second away. No candidate exists,
+;; so there is nothing to record, preview, draw or escape.
+(begin-tx)
+(env-chain-data { "block-height": 519, "block-time": (time "2026-10-15T13:59:59Z") })
+(expect-failure "VISION-BLOCK-0 a second before the draw instant nobody can open the draw"
+  "the draw opens at 2026-10-15T14:00:00Z"
+  (smartpacts.prize-draw.open-draw "frozen" 1))
+(expect "VISION-BLOCK-0b so no candidate exists: no open draw, no candidate heights, no record, no decider"
+  { "draw-open": false, "decide-height": 0, "candidates": [], "block-recorded": false, "deciding-block": -1 }
+  (let ((d (smartpacts.prize-draw.draw-status "frozen" 1)))
+    { "draw-open": (at 'draw-open d), "decide-height": (at 'decide-height d), "candidates": (at 'candidates d)
+    , "block-recorded": (at 'block-recorded d), "deciding-block": (at 'deciding-block d) }))
+(expect "VISION-BLOCK-0c nothing is decidable" false
+  (smartpacts.prize-draw.decidable "frozen" 1))
+(expect-failure "VISION-BLOCK-0d the preview names nobody rather than inventing a winner"
+  "the draw has not been opened yet — nothing is decided"
+  (smartpacts.prize-draw.preview "frozen" 1))
+(expect-failure "VISION-BLOCK-0e and the draw refuses"
+  "the draw has not been opened yet"
+  (smartpacts.prize-draw.draw "frozen" 1 "k:2222222222222222222222222222222222222222222222222222222222222222"))
+(rollback-tx)
+
+;; ---- the instant: ANYONE opens, and the candidates are the NEXT blocks --------
+;; From block 520 with the clock at Oct 15 14:00 the candidates are 522..524.
+;; Whoever opens chooses nothing: the hash of a block that does not yet exist is
+;; unknown to everyone.
+(begin-tx)
+(env-chain-data { "block-height": 520, "block-time": (time "2026-10-15T14:00:00Z"), "sender": "k:anyone" })
+(expect "VISION-BLOCK-1 at the draw instant anyone opens the draw, and the candidates are the next blocks: 522 to 524"
+  "frozen round 1: candidate blocks 522 to 524"
+  (smartpacts.prize-draw.open-draw "frozen" 1))
+(expect "VISION-BLOCK-1b the round pins 522 and names three candidates, none of them on record yet"
+  { "draw-open": true, "decide-height": 522, "candidates": [522 523 524], "block-recorded": false, "deciding-block": -1 }
+  (let ((d (smartpacts.prize-draw.draw-status "frozen" 1)))
+    { "draw-open": (at 'draw-open d), "decide-height": (at 'decide-height d), "candidates": (at 'candidates d)
+    , "block-recorded": (at 'block-recorded d), "deciding-block": (at 'deciding-block d) }))
+(commit-tx)
+
+;; ---- the draw is open but no candidate is mined: still nothing ----------------
+;; A record of block 520 — the block the draw was opened in, BEFORE the window —
+;; lands from block 521. It is a real record and it decides nothing: only the
+;; three candidates can.
+(begin-tx)
+(env-chain-data { "block-height": 521
+                , "prev-block-hash": "Kx9vT2mQaLp0ZcWdRe4NuYhGsBjFo7Ei1MtVn5Cr8Xy"
+                , "sender": "k:2222222222222222222222222222222222222222222222222222222222222222" })
+(expect "VISION-BLOCK-2 a block before the window goes on record" "recorded" (free.block-history.attest))
+(expect "VISION-BLOCK-2b and decides nothing: not decidable" false
+  (smartpacts.prize-draw.decidable "frozen" 1))
+(expect-failure "VISION-BLOCK-2c the preview still names nobody"
+  "no deciding block is recorded for this round"
+  (smartpacts.prize-draw.preview "frozen" 1))
+(expect-failure "VISION-BLOCK-2d and the draw still refuses"
+  "no deciding block is recorded for this round"
+  (smartpacts.prize-draw.draw "frozen" 1 "k:2222222222222222222222222222222222222222222222222222222222222222"))
+(rollback-tx)
+
+;; ---- the record: the LOWEST recorded candidate decides ------------------------
+;; Block 522 is recorded from 523 by the second persona, who will also send the
+;; draw. The two rows (live and frozen) still disagree on the fee.
+(begin-tx)
+(env-chain-data { "block-height": 523
+                , "prev-block-hash": "qP4mXe2NbVc7ZaLdKrTyHuGjFsEoWiRxBn0Mv9Ct3Yk"
+                , "sender": "k:2222222222222222222222222222222222222222222222222222222222222222" })
+(expect "VISION-BLOCK-3 the deciding block is recorded by an engine-fed, argument-free attest"
+  "recorded" (free.block-history.attest))
+(expect "VISION-BLOCK-3b the round is decidable the moment it is recorded — no confirmations, no reveal"
+  true (smartpacts.prize-draw.decidable "frozen" 1))
+(expect "VISION-BLOCK-3c the decider is 522, and its record holds the hash the engine fed"
+  { "deciding-block": 522, "hash": "qP4mXe2NbVc7ZaLdKrTyHuGjFsEoWiRxBn0Mv9Ct3Yk" }
+  { "deciding-block": (at 'deciding-block (smartpacts.prize-draw.draw-status "frozen" 1))
+  , "hash": (free.block-history.hash-of 522) })
+(commit-tx)
+
+;; A second candidate, 523, is recorded from 524 by someone else with a
+;; different hash. The decider is unchanged: the lowest recorded, not the latest.
+(begin-tx)
+(env-chain-data { "block-height": 524
+                , "prev-block-hash": "Zt3bLm8QwXc1VpRnKe6YuHaGdJsFi2OoNv0Mr9Cy5Tk"
+                , "sender": "k:5ea1000000000000000000000000000000000000000000000000000000000001" })
+(expect "VISION-BLOCK-3d a higher candidate recorded later" "recorded" (free.block-history.attest))
+(expect "VISION-BLOCK-3e does not move the decider: the LOWEST recorded decides" 522
+  (at 'deciding-block (smartpacts.prize-draw.draw-status "frozen" 1)))
+(commit-tx)
+
+;; ---- the draw is a PURE FUNCTION of the round key and the deciding hash ------
+;; Recomputed HERE, from the literal hash the test fed the engine and the round
+;; key, through the module's public pure functions; then compared with the row
+;; the draw wrote. The preview is captured BEFORE the draw is sent and compared
+;; with the settled row afterwards.
+(begin-tx)
+(env-chain-data { "block-height": 700 })
+(let* ((rk (smartpacts.prize-draw.round-key "frozen" 1))
+       (seed (smartpacts.prize-draw.round-seed rk "qP4mXe2NbVc7ZaLdKrTyHuGjFsEoWiRxBn0Mv9Ct3Yk"))
+       (ranks (smartpacts.prize-draw.draw-ranks seed rk 10 1))
+       (pv (smartpacts.prize-draw.preview "frozen" 1))
+       (before (coin.get-balance "k:1111111111111111111111111111111111111111111111111111111111111111")))
+  (smartpacts.prize-draw.draw "frozen" 1
+    "k:2222222222222222222222222222222222222222222222222222222222222222")
+  (let ((rd (smartpacts.prize-draw.get-round "frozen" 1))
+        (paid (- (coin.get-balance "k:1111111111111111111111111111111111111111111111111111111111111111") before)))
+    (expect "VISION-BLOCK-4 the settled seed is round-seed of the round key and the deciding hash, recomputed here"
+      seed (at 'draw-seed rd))
+    (expect "VISION-BLOCK-4b the settled ranks are draw-ranks of that seed, recomputed here"
+      ranks (at 'ranks rd))
+    (expect "VISION-BLOCK-4c the settled round equals what preview returned before the draw was sent"
+      { "deciding-block": (at 'deciding-block pv), "draw-seed": (at 'draw-seed pv), "ranks": (at 'ranks pv)
+      , "amounts": (at 'amounts pv), "accounts": (at 'accounts pv) }
+      { "deciding-block": (at 'deciding-block rd), "draw-seed": (at 'draw-seed rd), "ranks": (at 'ranks rd)
+      , "amounts": (at 'amounts rd), "accounts": (at 'accounts rd) })
+    ;; sole buyer holds every ticket, so the single tier pays the whole fund to
+    ;; them. At the FROZEN 5% fee the fund is 95.0. At the raised 90% fee it
+    ;; would be 10.0 — an 85 KDA difference this assertion cannot miss.
+    (print (format "VISION: buyer received {} (95.0 = frozen 5% fee, 10.0 = live 90% fee)" [paid]))
+    (expect "VISION-5 SETTLEMENT used the FROZEN fee, not the operator's mid-round raise"
+      95.0 paid)))
+(commit-tx)
+
+(begin-tx)
+(let ((rd (smartpacts.prize-draw.get-round "frozen" 1)))
+  (expect "VISION-6 the round settled" "drawn" (at 'state rd))
+  (expect "VISION-7 the whole frozen-fee fund was paid out" [95.0] (at 'amounts rd)))
+(expect "VISION-8 the pool is empty — the raised fee took nothing extra" 0.0
+  (coin.get-balance (smartpacts.prize-draw.pool-account "frozen")))
+(commit-tx)
+
+;; ===========================================================================
+;; FOUNDER: "winners paid automatically, nothing to claim."
+;; Pinned structurally: a claim entry point for a DRAWN round must not exist.
+;; claim-escape is the escape path only, and must refuse a drawn round.
+;; ===========================================================================
+(begin-tx)
+(expect-failure "VISION-9 there is no claim step for a drawn round"
+  "did not escape"
+  (smartpacts.prize-draw.claim-escape "frozen" 1
+    "k:1111111111111111111111111111111111111111111111111111111111111111"))
+(rollback-tx)
+
+;; ===========================================================================
+;; FOUNDER (2026-09-15): "the operator names when a raffle sells and draws, by
+;; calendar instants, and can change them for the next round until its first
+;; ticket; a round's instants are frozen at its first ticket; nothing can
+;; decide a round before its draw instant."
+;;
+;; Four clauses, each a NAMED test that goes RED if it is violated. Every gate
+;; pinned here is a CLOCK gate: the heights only matter for the candidate
+;; blocks the draw fixes once it opens.
+;; ===========================================================================
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(smartpacts.prize-draw.create-raffle "cal" 1.0 0.05 [1.0] 0 false 0.0 0 200.0 0.20 [1 1])
+(commit-tx)
+
+;; ---- clause 1: the OPERATOR names the instants ------------------------------
+(begin-tx)
+(env-chain-data { "block-height": 800, "block-time": (time "2026-11-01T00:00:00Z") })
+(expect "VISION-CAL-1 the operator names when the next round sells and draws, as calendar instants"
+  "raffle cal next round: sells 2026-11-02T00:00:00Z to 2026-11-03T00:00:00Z, draws at 2026-11-03T12:00:00Z"
+  (smartpacts.prize-draw.schedule-round "cal"
+    (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T12:00:00Z")))
+(expect "VISION-CAL-1b the raffle carries exactly those three instants for its next round"
+  { "opens": (time "2026-11-02T00:00:00Z"), "closes": (time "2026-11-03T00:00:00Z"), "draws": (time "2026-11-03T12:00:00Z") }
+  (let ((g (smartpacts.prize-draw.get-raffle "cal")))
+    { "opens": (at 'next-opens-at g), "closes": (at 'next-closes-at g), "draws": (at 'next-draws-at g) }))
+(commit-tx)
+(env-sigs [])
+
+(begin-tx)
+(expect-failure "VISION-CAL-1c nobody but the operator names them"
+  "Keyset failure"
+  (smartpacts.prize-draw.schedule-round "cal"
+    (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T12:00:00Z")))
+(rollback-tx)
+
+;; ---- clause 2: changeable for the NEXT round until its first ticket ----------
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(expect "VISION-CAL-2 before any ticket, the operator can move the next round's instants"
+  "raffle cal next round: sells 2026-11-05T00:00:00Z to 2026-11-06T00:00:00Z, draws at 2026-11-06T06:00:00Z"
+  (smartpacts.prize-draw.schedule-round "cal"
+    (time "2026-11-05T00:00:00Z") (time "2026-11-06T00:00:00Z") (time "2026-11-06T06:00:00Z")))
+(expect "VISION-CAL-2b and the later call is the one that stands"
+  { "opens": (time "2026-11-05T00:00:00Z"), "closes": (time "2026-11-06T00:00:00Z"), "draws": (time "2026-11-06T06:00:00Z") }
+  (let ((g (smartpacts.prize-draw.get-raffle "cal")))
+    { "opens": (at 'next-opens-at g), "closes": (at 'next-closes-at g), "draws": (at 'next-draws-at g) }))
+(commit-tx)
+(env-sigs [])
+
+;; ---- clause 1, the selling half, and clause 3: the FIRST TICKET freezes -------
+;; Tickets sell exactly between the instants, and the first one is what creates
+;; the round and freezes the instants that stood when it landed.
+(env-sigs [ { "key": "1111111111111111111111111111111111111111111111111111111111111111"
+            , "caps": [ (coin.TRANSFER "k:1111111111111111111111111111111111111111111111111111111111111111"
+                                       (smartpacts.prize-draw.pool-account "cal") 1.0) ] } ])
+(begin-tx)
+(env-chain-data { "block-height": 802, "block-time": (time "2026-11-04T23:59:59Z") })
+(expect-failure "VISION-CAL-4a no ticket sells before the instant the operator named — and so no round exists"
+  "sales have not opened yet — they open at 2026-11-05T00:00:00Z"
+  (smartpacts.prize-draw.buy "cal" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 []))
+(expect "VISION-CAL-4a2 no round row exists before the first ticket" ""
+  (at 'current (smartpacts.prize-draw.get-raffle "cal")))
+(rollback-tx)
+(begin-tx)
+(env-chain-data { "block-height": 803, "block-time": (time "2026-11-05T00:00:00Z") })
+(expect "VISION-CAL-3 the first ticket sells at that instant, creates the round and freezes the instants that stood when it landed"
+  "bought 1 ticket(s) in cal round 1"
+  (smartpacts.prize-draw.buy "cal" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 []))
+(expect "VISION-CAL-3b the round row carries them"
+  { "opens": (time "2026-11-05T00:00:00Z"), "closes": (time "2026-11-06T00:00:00Z"), "draws": (time "2026-11-06T06:00:00Z") }
+  (let ((r (smartpacts.prize-draw.get-round "cal" 1)))
+    { "opens": (at 'opens-at r), "closes": (at 'closes-at r), "draws": (at 'draws-at r) }))
+(expect "VISION-CAL-3c the first ticket consumed the schedule — the round after this one needs its own"
+  { "opens": (time "1970-01-01T00:00:00Z"), "closes": (time "1970-01-01T00:00:00Z"), "draws": (time "1970-01-01T00:00:00Z") }
+  (let ((g (smartpacts.prize-draw.get-raffle "cal")))
+    { "opens": (at 'next-opens-at g), "closes": (at 'next-closes-at g), "draws": (at 'next-draws-at g) }))
+(commit-tx)
+(begin-tx)
+(env-chain-data { "block-height": 803, "block-time": (time "2026-11-05T12:00:00Z") })
+(expect "VISION-CAL-4b a later ticket joins the round inside the window"
+  "bought 1 ticket(s) in cal round 1"
+  (smartpacts.prize-draw.buy "cal" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 []))
+(commit-tx)
+(begin-tx)
+(env-chain-data { "block-height": 804, "block-time": (time "2026-11-06T00:00:00Z") })
+(expect-failure "VISION-CAL-4c and none at the instant sales close"
+  "sales are closed for this round"
+  (smartpacts.prize-draw.buy "cal" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 []))
+(rollback-tx)
+(env-sigs [])
+
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(expect "VISION-CAL-3d a schedule named after the first ticket belongs to the NEXT round"
+  "raffle cal next round: sells 2026-11-10T00:00:00Z to 2026-11-11T00:00:00Z, draws at 2026-11-11T06:00:00Z"
+  (smartpacts.prize-draw.schedule-round "cal"
+    (time "2026-11-10T00:00:00Z") (time "2026-11-11T00:00:00Z") (time "2026-11-11T06:00:00Z")))
+(expect "VISION-CAL-3e and leaves the live round's instants exactly where its first ticket froze them"
+  { "opens": (time "2026-11-05T00:00:00Z"), "closes": (time "2026-11-06T00:00:00Z"), "draws": (time "2026-11-06T06:00:00Z") }
+  (let ((r (smartpacts.prize-draw.get-round "cal" 1)))
+    { "opens": (at 'opens-at r), "closes": (at 'closes-at r), "draws": (at 'draws-at r) }))
+(commit-tx)
+(env-sigs [])
+
+;; ---- clause 4: NOTHING decides a round before its draw instant ---------------
+;; Sales are closed and the draw instant is a second away. No candidate block
+;; exists yet, so there is nothing to record, draw, preview or escape.
+(begin-tx)
+(env-chain-data { "block-height": 820, "block-time": (time "2026-11-06T05:59:59Z") })
+(expect-failure "VISION-CAL-5 a second before its draw instant the draw cannot be opened"
+  "the draw opens at 2026-11-06T06:00:00Z"
+  (smartpacts.prize-draw.open-draw "cal" 1))
+(expect "VISION-CAL-5b the round reports no draw open, no candidate block, nothing decidable"
+  { "draw-open": false, "decide-height": 0, "decidable": false }
+  { "draw-open": (at 'draw-open (smartpacts.prize-draw.draw-status "cal" 1))
+  , "decide-height": (at 'decide-height (smartpacts.prize-draw.get-round "cal" 1))
+  , "decidable": (smartpacts.prize-draw.decidable "cal" 1) })
+(expect-failure "VISION-CAL-5c nobody can draw into a draw that does not exist"
+  "the draw has not been opened yet"
+  (smartpacts.prize-draw.draw "cal" 1 "k:2222222222222222222222222222222222222222222222222222222222222222"))
+(expect-failure "VISION-CAL-5d the preview names no winner"
+  "the draw has not been opened yet — nothing is decided"
+  (smartpacts.prize-draw.preview "cal" 1))
+(expect-failure "VISION-CAL-5e nor can an escape settle the round out from under its buyers"
+  "the draw has not been opened — anyone may open it once its draw instant passes"
+  (smartpacts.prize-draw.escape "cal" 1))
+(rollback-tx)
+
+(begin-tx)
+(env-chain-data { "block-height": 820, "block-time": (time "2026-11-06T06:00:00Z"), "sender": "k:anyone" })
+(expect "VISION-CAL-6 at its draw instant anyone opens the draw, and the candidates are the next blocks: 822 to 824"
+  "cal round 1: candidate blocks 822 to 824"
+  (smartpacts.prize-draw.open-draw "cal" 1))
+(expect "VISION-CAL-6b the round now pins block 822 — the FIRST moment anything about its outcome exists"
+  822 (at 'decide-height (smartpacts.prize-draw.get-round "cal" 1)))
+(commit-tx)
+
+;; ---- VISION-CAL-WRAP: an absurd instant cannot be scheduled -----------------
+;; Pact's `diff-time` and `add-time` work in int64 microseconds and wrap silently
+;; (engine: CoreBuiltin.hs, `diffTime` = PactTime subtraction). An instant past
+;; the edge reads as the deep past, so BOTH sides of every bound are needed: the
+;; lower bound catches a wrapped opens-at, the upper bounds catch a wrapped
+;; closes-at and draws-at. Relaxing any one of them turns one of these red.
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(env-chain-data { "block-height": 900, "block-time": (time "2026-11-06T06:00:00Z") })
+(begin-tx)
+(smartpacts.prize-draw.create-raffle "wrapr" 1.0 0.05 [1.0] 0 false 0.0 0 200.0 0.20 [1 1])
+(let ((edge (add-time (add-time (time "2026-11-06T06:00:00Z") 9223372036854.775807) 1.0)))
+  (expect "VISION-CAL-WRAP-0 the engine wraps: one second past the int64 edge reads as the deep past" true
+    (< (diff-time edge (time "2026-11-06T06:00:00Z")) 0.0))
+  (expect-failure "VISION-CAL-WRAP-1 a wrapped opens-at is refused as the past" "sales cannot open in the past"
+    (smartpacts.prize-draw.schedule-round "wrapr" edge (time "2026-12-01T00:00:00Z") (time "2026-12-01T00:00:00Z")))
+  (expect-failure "VISION-CAL-WRAP-2 a wrapped closes-at is refused by the sales ceiling" "sales may stay open at most"
+    (smartpacts.prize-draw.schedule-round "wrapr" (time "2026-11-07T00:00:00Z") edge (time "2026-12-01T00:00:00Z")))
+  (expect-failure "VISION-CAL-WRAP-3 a wrapped draws-at is refused by the draw-gap ceiling" "the draw must come within"
+    (smartpacts.prize-draw.schedule-round "wrapr" (time "2026-11-07T00:00:00Z") (time "2026-11-08T00:00:00Z") edge)))
+;; A SECOND wrap distance, and the one that matters most: an instant far enough past
+;; the edge that the difference wraps back to a large POSITIVE number. The lower
+;; bound sees a future instant and lets it through; only the lead ceiling refuses it.
+;; Measured 2026-09-16: (time "0294248-01-10T04:00:54Z") reads back as the year
+;; -290307, and its difference from a 2026 clock is +9,221,614,099,254 seconds.
+;; This is the test that goes red if MAX-LEAD-SECONDS is ever relaxed.
+(let ((far (time "0294248-01-10T04:00:54Z")))
+  (expect "VISION-CAL-WRAP-4 the far instant itself wraps to the deep past" true
+    (< far (time "2026-11-06T06:00:00Z")))
+  (expect "VISION-CAL-WRAP-4b yet its difference from the clock reads POSITIVE, so the lower bound cannot catch it" true
+    (> (diff-time far (time "2026-11-06T06:00:00Z")) 0.0))
+  (expect-failure "VISION-CAL-WRAP-5 and the LEAD ceiling is what refuses it" "sales cannot open more than"
+    (smartpacts.prize-draw.schedule-round "wrapr" far (time "2026-12-01T00:00:00Z") (time "2026-12-01T00:00:00Z"))))
+(rollback-tx)
+(env-sigs [])
+
+;; ===========================================================================
+;; FOUNDER (2026-09-15): the draw is SIMPLE. After the operator schedules, a
+;; whole round needs exactly FOUR transactions: the first ticket, open-draw,
+;; the block record, the draw. Nothing to seal, nothing to reveal, nothing to
+;; claim.
+;;
+;; Pinned by COUNTING: the four calls are collected in one REPL transaction
+;; whose chain data is advanced between them the way four blocks would be, the
+;; list is four long and the round is drawn at its end; each shorter prefix
+;; leaves the round undrawable (asserted between the calls); and a fifth call
+;; of any settling kind is refused afterwards.
+;; ===========================================================================
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(env-chain-data { "block-height": 890, "block-time": (time "2026-11-15T00:00:00Z") })
+(smartpacts.prize-draw.create-raffle "simple" 1.0 0.05 [1.0] 0 false 0.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.schedule-round "simple"
+  (time "2026-11-16T00:00:00Z") (time "2026-11-17T00:00:00Z") (time "2026-11-17T06:00:00Z"))
+(commit-tx)
+(env-sigs [])
+
+(begin-tx)
+(env-sigs [ { "key": "1111111111111111111111111111111111111111111111111111111111111111"
+            , "caps": [ (coin.TRANSFER "k:1111111111111111111111111111111111111111111111111111111111111111"
+                                       (smartpacts.prize-draw.pool-account "simple") 2.0) ] } ])
+(let* ((buyer "k:1111111111111111111111111111111111111111111111111111111111111111")
+       ;; 1. the first ticket, inside the sales window
+       (t1 (env-chain-data { "block-height": 900, "block-time": (time "2026-11-16T00:00:00Z") }))
+       (s1 (smartpacts.prize-draw.buy "simple" buyer 2 []))
+       (d1 (smartpacts.prize-draw.decidable "simple" 1))
+       ;; 2. open-draw, at the draw instant
+       (t2 (env-chain-data { "block-height": 920, "block-time": (time "2026-11-17T06:00:00Z"), "sender": "k:anyone" }))
+       (s2 (smartpacts.prize-draw.open-draw "simple" 1))
+       (d2 (smartpacts.prize-draw.decidable "simple" 1))
+       ;; 3. the record of the first candidate, from the block after it
+       (t3 (env-chain-data { "block-height": 923, "prev-block-hash": "Sm7pLe1BqXz4WcVnKr0YtHgJdF9EoUiAsN2Mv6Ct3Rk"
+                           , "sender": "k:2222222222222222222222222222222222222222222222222222222222222222" }))
+       (s3 (free.block-history.attest))
+       (d3 (smartpacts.prize-draw.decidable "simple" 1))
+       ;; 4. the draw, in the recording block itself
+       (s4 (smartpacts.prize-draw.draw "simple" 1 "k:2222222222222222222222222222222222222222222222222222222222222222"))
+       (steps [s1 s2 s3 s4]))
+  (expect "VISION-SIMPLE-1 after scheduling, exactly four calls take a round from nothing to drawn" 4 (length steps))
+  (expect "VISION-SIMPLE-1b and they are: the first ticket, open-draw, the record, the draw"
+    [ "bought 2 ticket(s) in simple round 1", "simple round 1: candidate blocks 922 to 924", "recorded" ]
+    (take 3 steps))
+  (expect "VISION-SIMPLE-1c the fourth settles it" "drawn"
+    (at 'state (smartpacts.prize-draw.get-round "simple" 1)))
+  (expect "VISION-SIMPLE-2 no shorter prefix could have: after the ticket, after open-draw, nothing is decidable; after the record it is"
+    [false false true] [d1 d2 d3]))
+(commit-tx)
+(env-sigs [])
+
+(begin-tx)
+(expect-failure "VISION-SIMPLE-3 there is no fifth: a drawn round cannot be drawn again"
+  "this round is already settled"
+  (smartpacts.prize-draw.draw "simple" 1 "k:2222222222222222222222222222222222222222222222222222222222222222"))
+(expect-failure "VISION-SIMPLE-3b nor opened again" "this round is not selling"
+  (smartpacts.prize-draw.open-draw "simple" 1))
+(expect-failure "VISION-SIMPLE-3c nor escaped" "this round is settled"
+  (smartpacts.prize-draw.escape "simple" 1))
+(expect-failure "VISION-SIMPLE-3d nor claimed — the winner was paid inside the draw" "did not escape"
+  (smartpacts.prize-draw.claim-escape "simple" 1 "k:1111111111111111111111111111111111111111111111111111111111111111"))
+(rollback-tx)
+
+;; ===========================================================================
+;; FOUNDER (2026-09-15): no party INFLUENCES the outcome once the draw is open.
+;; A recorder cannot choose the decider: with two of the three candidates on
+;; record, the decider is the LOWEST recorded, whoever recorded it — all a
+;; recorder can do is decline to record one and let the next stand (a choice by
+;; OMISSION, disclosed at DECIDE-WINDOW). And once decide-height and
+;; deciding-block are written, no public function rewrites either.
+;; ===========================================================================
+;; two buyers, two tiers, so the ranks and the accounts are not trivial
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(env-chain-data { "block-height": 940, "block-time": (time "2026-11-19T00:00:00Z") })
+(smartpacts.prize-draw.create-raffle "infl" 1.0 0.05 [0.7 0.3] 0 false 0.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.schedule-round "infl"
+  (time "2026-11-20T00:00:00Z") (time "2026-11-21T00:00:00Z") (time "2026-11-21T06:00:00Z"))
+(commit-tx)
+(env-sigs [])
+(begin-tx)
+(env-chain-data { "block-height": 950, "block-time": (time "2026-11-20T00:00:00Z") })
+(env-sigs [ { "key": "1111111111111111111111111111111111111111111111111111111111111111"
+            , "caps": [ (coin.TRANSFER "k:1111111111111111111111111111111111111111111111111111111111111111"
+                                       (smartpacts.prize-draw.pool-account "infl") 6.0) ] } ])
+(smartpacts.prize-draw.buy "infl" "k:1111111111111111111111111111111111111111111111111111111111111111" 6 [])
+(env-sigs [ { "key": "2222222222222222222222222222222222222222222222222222222222222222"
+            , "caps": [ (coin.TRANSFER "k:2222222222222222222222222222222222222222222222222222222222222222"
+                                       (smartpacts.prize-draw.pool-account "infl") 4.0) ] } ])
+(smartpacts.prize-draw.buy "infl" "k:2222222222222222222222222222222222222222222222222222222222222222" 4 [])
+(commit-tx)
+(env-sigs [])
+
+;; the draw opens from block 1000: candidates 1002, 1003, 1004
+(begin-tx)
+(env-chain-data { "block-height": 1000, "block-time": (time "2026-11-21T06:00:00Z"), "sender": "k:anyone" })
+(expect "VISION-INFLUENCE-0 the draw is opened: candidates 1002 to 1004"
+  "infl round 1: candidate blocks 1002 to 1004"
+  (smartpacts.prize-draw.open-draw "infl" 1))
+(commit-tx)
+
+;; ---- decide-height, once written, is rewritten by NOTHING --------------------
+;; Every public function that writes is tried between the opening and the
+;; record, and the pair (decide-height, deciding-block) is read back after each.
+;; Refusals roll back; successes that would clutter the rest of the file roll
+;; back too, AFTER the assertion. The pure helpers (round-seed, draw-ranks,
+;; tier-amounts, merge-payee, lift, draw-candidate, the key builders,
+;; validate-*) contain no table write and cannot be the rewriter.
+(begin-tx)
+(env-chain-data { "block-height": 1001 })
+(expect-failure "VISION-INFLUENCE-1a open-draw again is refused" "the draw is already open"
+  (smartpacts.prize-draw.open-draw "infl" 1))
+(expect-failure "VISION-INFLUENCE-1b draw before a record is refused" "no deciding block is recorded"
+  (smartpacts.prize-draw.draw "infl" 1 "k:2222222222222222222222222222222222222222222222222222222222222222"))
+(expect-failure "VISION-INFLUENCE-1c preview before a record is refused" "no deciding block is recorded"
+  (smartpacts.prize-draw.preview "infl" 1))
+(expect-failure "VISION-INFLUENCE-1d escape while a candidate can still be recorded is refused" "the deciding window is still open"
+  (smartpacts.prize-draw.escape "infl" 1))
+(expect-failure "VISION-INFLUENCE-1e claim-escape on a round that did not escape is refused" "did not escape"
+  (smartpacts.prize-draw.claim-escape "infl" 1 "k:1111111111111111111111111111111111111111111111111111111111111111"))
+(expect-failure "VISION-INFLUENCE-1g a ticket into a closed round is refused" "sales are closed for this round"
+  (smartpacts.prize-draw.buy "infl" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 []))
+(expect "VISION-INFLUENCE-1h the pair stands: 1002 pinned, nothing decided"
+  { "decide-height": 1002, "deciding-block": -1 }
+  (let ((r (smartpacts.prize-draw.get-round "infl" 1)))
+    { "decide-height": (at 'decide-height r), "deciding-block": (at 'deciding-block r) }))
+(rollback-tx)
+
+;; even the admin, signing, cannot initialize twice: the state row is insert-once
+(begin-tx)
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"
+            , "caps": [ (smartpacts.prize-draw.GOVERNANCE) ] } ])
+(expect-failure "VISION-INFLUENCE-1f a second initialize is refused even with the admin's signature" "already found"
+  (smartpacts.prize-draw.initialize "draw-revenue"))
+(rollback-tx)
+(env-sigs [])
+
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] }
+          , { "key": "5ea1000000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:5ea1000000000000000000000000000000000000000000000000000000000001"
+                                       (smartpacts.prize-draw.pool-account "infl") 1.0) ] } ])
+(smartpacts.prize-draw.set-terms "infl" 2.0 0.50 [1.0] 0 1.0 0 200.0 0.20 [1 0])
+(smartpacts.prize-draw.seed-raffle "infl" "k:5ea1000000000000000000000000000000000000000000000000000000000001" 1.0)
+(smartpacts.prize-draw.create-raffle "infl-2" 1.0 0.05 [1.0] 0 false 0.0 0 200.0 0.20 [1 1])
+(expect "VISION-INFLUENCE-1i set-terms, seed-raffle and create-raffle leave the pair untouched"
+  { "decide-height": 1002, "deciding-block": -1 }
+  (let ((r (smartpacts.prize-draw.get-round "infl" 1)))
+    { "decide-height": (at 'decide-height r), "deciding-block": (at 'deciding-block r) }))
+(rollback-tx)
+(env-sigs [])
+
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(smartpacts.prize-draw.retire-raffle "infl")
+(expect "VISION-INFLUENCE-1j retire-raffle leaves the pair untouched"
+  { "decide-height": 1002, "deciding-block": -1 }
+  (let ((r (smartpacts.prize-draw.get-round "infl" 1)))
+    { "decide-height": (at 'decide-height r), "deciding-block": (at 'deciding-block r) }))
+(rollback-tx)
+(env-sigs [])
+
+;; the next round's schedule, kept: it is what lets a LATER buy open round 2
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(smartpacts.prize-draw.schedule-round "infl"
+  (time "2026-11-22T00:00:00Z") (time "2026-11-22T01:00:00Z") (time "2026-11-22T01:00:00Z"))
+(expect "VISION-INFLUENCE-1k schedule-round leaves the pair untouched"
+  { "decide-height": 1002, "deciding-block": -1 }
+  (let ((r (smartpacts.prize-draw.get-round "infl" 1)))
+    { "decide-height": (at 'decide-height r), "deciding-block": (at 'deciding-block r) }))
+(commit-tx)
+(env-sigs [])
+
+;; ---- two of three recorded: the LOWEST recorded decides, whoever recorded it --
+;; Block 1002 is never recorded: its one recording block, 1003, passes with no
+;; attest. The first persona records 1003 from 1004; the second records 1004
+;; from 1005 and then sends the draw. The decider is 1003 — the lowest on
+;; record — and the record share goes to the first persona, not to the drawer
+;; who recorded the higher one.
+(begin-tx)
+(env-chain-data { "block-height": 1004
+                , "prev-block-hash": "In1fL3uEnCe4bLoCk1003aAbBcCdDeEfFgGhHiIjJkK"
+                , "sender": "k:5ea1000000000000000000000000000000000000000000000000000000000001" })
+(expect "VISION-INFLUENCE-2 the second candidate is recorded, the first was skipped" "recorded" (free.block-history.attest))
+(expect "VISION-INFLUENCE-2b the decider is 1003 — the lowest recorded" 1003
+  (at 'deciding-block (smartpacts.prize-draw.draw-status "infl" 1)))
+(commit-tx)
+(begin-tx)
+(env-chain-data { "block-height": 1005
+                , "prev-block-hash": "In1fL3uEnCe4bLoCk1004zZyYxXwWvVuUtTsSrRqQpP"
+                , "sender": "k:2222222222222222222222222222222222222222222222222222222222222222" })
+(expect "VISION-INFLUENCE-2c the third candidate is recorded too, by someone else" "recorded" (free.block-history.attest))
+(expect "VISION-INFLUENCE-2d two of three on record: the decider is still 1003, whoever recorded what"
+  { "deciding-block": 1003, "1002-recorded": false, "1003-recorded": true, "1004-recorded": true }
+  { "deciding-block": (at 'deciding-block (smartpacts.prize-draw.draw-status "infl" 1))
+  , "1002-recorded": (free.block-history.has-attested 1002)
+  , "1003-recorded": (free.block-history.has-attested 1003)
+  , "1004-recorded": (free.block-history.has-attested 1004) })
+(commit-tx)
+
+;; a late attest records 1005 — outside the window — and changes nothing
+(begin-tx)
+(env-chain-data { "block-height": 1006
+                , "prev-block-hash": "OuTsIdE5tHeWiNdOw1005aAbBcCdDeEfFgGhHiIjJkK"
+                , "sender": "k:5ea1000000000000000000000000000000000000000000000000000000000002" })
+(expect "VISION-INFLUENCE-2e a record outside the window lands" "recorded" (free.block-history.attest))
+(expect "VISION-INFLUENCE-2f and the decider is still 1003; 1002's only recording block has passed for good"
+  { "deciding-block": 1003, "1002-recorded": false }
+  { "deciding-block": (at 'deciding-block (smartpacts.prize-draw.draw-status "infl" 1))
+  , "1002-recorded": (free.block-history.has-attested 1002) })
+(commit-tx)
+
+;; the draw, sent by the persona who recorded the HIGHER candidate
+(begin-tx)
+(env-chain-data { "block-height": 1006 })
+(env-events true)
+(let* ((rk (smartpacts.prize-draw.round-key "infl" 1))
+       (seed (smartpacts.prize-draw.round-seed rk "In1fL3uEnCe4bLoCk1003aAbBcCdDeEfFgGhHiIjJkK")))
+  (smartpacts.prize-draw.draw "infl" 1 "k:2222222222222222222222222222222222222222222222222222222222222222")
+  (expect "VISION-INFLUENCE-3 the round settled on 1003 and on the seed of 1003's hash — not the drawer's own record"
+    { "deciding-block": 1003, "draw-seed": seed }
+    (let ((r (smartpacts.prize-draw.get-round "infl" 1)))
+      { "deciding-block": (at 'deciding-block r), "draw-seed": (at 'draw-seed r) }))
+  (expect "VISION-INFLUENCE-3b the record share went to whoever recorded 1003; the draw share to the drawer"
+    [ ["record" "k:5ea1000000000000000000000000000000000000000000000000000000000001"]
+    , ["draw"   "k:2222222222222222222222222222222222222222222222222222222222222222"] ]
+    (map (lambda (e:object) [ (at 2 (at 'params e)) (at 3 (at 'params e)) ])
+         (filter (lambda (e:object) (= (at 'name e) "smartpacts.prize-draw.BOUNTY-PAID")) (env-events true)))))
+(commit-tx)
+
+;; ---- both written: rewritten by NOTHING, including a NEW round ---------------
+(begin-tx)
+(env-chain-data { "block-height": 1007 })
+(expect-failure "VISION-INFLUENCE-4a a second draw is refused" "this round is already settled"
+  (smartpacts.prize-draw.draw "infl" 1 "k:2222222222222222222222222222222222222222222222222222222222222222"))
+(expect-failure "VISION-INFLUENCE-4b open-draw is refused" "this round is not selling"
+  (smartpacts.prize-draw.open-draw "infl" 1))
+(expect-failure "VISION-INFLUENCE-4c escape is refused" "this round is settled"
+  (smartpacts.prize-draw.escape "infl" 1))
+(expect-failure "VISION-INFLUENCE-4d claim-escape is refused" "did not escape"
+  (smartpacts.prize-draw.claim-escape "infl" 1 "k:1111111111111111111111111111111111111111111111111111111111111111"))
+(expect "VISION-INFLUENCE-4e the preview of a drawn round still reads 1003" 1003
+  (at 'deciding-block (smartpacts.prize-draw.preview "infl" 1)))
+(expect "VISION-INFLUENCE-4f the pair stands"
+  { "decide-height": 1002, "deciding-block": 1003 }
+  (let ((r (smartpacts.prize-draw.get-round "infl" 1)))
+    { "decide-height": (at 'decide-height r), "deciding-block": (at 'deciding-block r) }))
+(rollback-tx)
+
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] }
+          , { "key": "5ea1000000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:5ea1000000000000000000000000000000000000000000000000000000000001"
+                                       (smartpacts.prize-draw.pool-account "infl") 1.0) ] } ])
+(smartpacts.prize-draw.set-terms "infl" 2.0 0.50 [1.0] 0 1.0 0 200.0 0.20 [0 1])
+(smartpacts.prize-draw.seed-raffle "infl" "k:5ea1000000000000000000000000000000000000000000000000000000000001" 1.0)
+(expect "VISION-INFLUENCE-4g set-terms and seed-raffle after the draw leave the pair untouched"
+  { "decide-height": 1002, "deciding-block": 1003 }
+  (let ((r (smartpacts.prize-draw.get-round "infl" 1)))
+    { "decide-height": (at 'decide-height r), "deciding-block": (at 'deciding-block r) }))
+(rollback-tx)
+(env-sigs [])
+
+;; the NEXT round opens by its first ticket and its own draw opens; round 1's
+;; pair is not the one being written
+(begin-tx)
+(env-chain-data { "block-height": 1100, "block-time": (time "2026-11-22T00:30:00Z") })
+(env-sigs [ { "key": "1111111111111111111111111111111111111111111111111111111111111111"
+            , "caps": [ (coin.TRANSFER "k:1111111111111111111111111111111111111111111111111111111111111111"
+                                       (smartpacts.prize-draw.pool-account "infl") 1.0) ] } ])
+(expect "VISION-INFLUENCE-5 a later ticket opens round 2, not round 1"
+  "bought 1 ticket(s) in infl round 2"
+  (smartpacts.prize-draw.buy "infl" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 []))
+(env-chain-data { "block-height": 1101, "block-time": (time "2026-11-22T01:00:00Z"), "sender": "k:anyone" })
+(expect "VISION-INFLUENCE-5b round 2's draw opens on its own candidates"
+  "infl round 2: candidate blocks 1103 to 1105"
+  (smartpacts.prize-draw.open-draw "infl" 2))
+(expect "VISION-INFLUENCE-5c and round 1's pair stands"
+  { "decide-height": 1002, "deciding-block": 1003 }
+  (let ((r (smartpacts.prize-draw.get-round "infl" 1)))
+    { "decide-height": (at 'decide-height r), "deciding-block": (at 'deciding-block r) }))
+(commit-tx)
+(env-sigs [])
+
+(begin-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(env-chain-data { "block-height": 1200, "block-time": (time "2026-11-23T00:00:00Z") })
+(smartpacts.prize-draw.schedule-round "infl"
+  (time "2026-11-24T00:00:00Z") (time "2026-11-24T01:00:00Z") (time "2026-11-24T01:00:00Z"))
+(expect "VISION-INFLUENCE-5d nor does scheduling a third round touch it — every writer has now been tried"
+  { "decide-height": 1002, "deciding-block": 1003 }
+  (let ((r (smartpacts.prize-draw.get-round "infl" 1)))
+    { "decide-height": (at 'decide-height r), "deciding-block": (at 'deciding-block r) }))
+(rollback-tx)
+(env-sigs [])
+
+(print "prize-draw vision suite complete")

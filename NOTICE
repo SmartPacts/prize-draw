@@ -1,0 +1,15 @@
+Prize Draw
+Copyright 2026 Smart Pacts
+
+This product includes software developed at Smart Pacts.
+
+VENDORED, NOT OURS. Under pact/vendor/ are copies of code we did not write, kept only so the test
+suite can load the dependencies the contract compiles against:
+
+  * fixtures/coin.pact, fixtures/fungible-v2.pact, fixtures/fungible-xchain-v1.pact —
+    Kadena's coin contract and fungible interfaces, from kadena-io/chainweb-node.
+  * block-history.pact — the block record the contract reads, published separately at
+    github.com/SmartPacts/block-history.
+
+They are not part of the deployed artifact. On chain the contract resolves the real modules by
+name, and pins the block record by hash.

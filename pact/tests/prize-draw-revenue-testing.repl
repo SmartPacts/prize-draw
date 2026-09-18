@@ -1,0 +1,80 @@
+;; prize-draw-revenue-testing.repl — the fee destination. Fees must be able to land
+;; in ANOTHER module's guarded account (that is how they reach the token's funding
+;; account), while this module's own pools stay refused. The other suites already
+;; ran initialize once, so the positive proof needs a fresh state: this file.
+(load "prize-draw-test-init.repl")
+(begin-tx)
+(env-data { "p": { "keys": ["9111111111111111111111111111111111111111111111111111111111111111"], "pred": "keys-all" }, "b": { "keys": ["b070000000000000000000000000000000000000000000000000000000000005"], "pred": "keys-all" }, "c": { "keys": ["c4a4000000000000000000000000000000000000000000000000000000000009"], "pred": "keys-all" } })
+(test-capability (coin.COINBASE))
+(coin.coinbase "k:9111111111111111111111111111111111111111111111111111111111111111" (read-keyset "p") 5000.0)(coin.coinbase "k:b070000000000000000000000000000000000000000000000000000000000005" (read-keyset "b") 10.0)(coin.coinbase "k:c4a4000000000000000000000000000000000000000000000000000000000009" (read-keyset "c") 10.0)
+(commit-tx)
+;; A stand-in for the token: a module whose funding account is guarded by its own
+;; module guard, exactly the shape of SPT's FUNDING-ACCOUNT. Its governance can never
+;; be satisfied, so it is frozen from birth and holds no other power.
+(begin-tx)
+(namespace "smartpacts")
+(module token-stub G
+  (defcap G () (enforce false "the stub is frozen"))
+  (defun funding-guard:guard () (create-module-guard "SPT-funding"))
+  (defun funding-account:string () (create-principal (funding-guard))))
+(commit-tx)
+(begin-tx)
+(coin.create-account (smartpacts.token-stub.funding-account) (smartpacts.token-stub.funding-guard))
+(expect "REV-0 the stub's funding account is a module-guarded m: principal" "m:" (take 2 (smartpacts.token-stub.funding-account)))
+(commit-tx)
+(begin-tx)
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef", "caps": [ (smartpacts.prize-draw.GOVERNANCE) ] } ])
+(expect-failure "REV-1 one of this module's own pools is refused as the fee destination" "revenue must not be one of this module's pools"
+  (smartpacts.prize-draw.initialize (smartpacts.prize-draw.pool-account "any")))
+(expect-failure "REV-2 an account that does not exist is refused" "No value found"
+  (smartpacts.prize-draw.initialize "k:0000000000000000000000000000000000000000000000000000000000000000"))
+(expect "REV-3 another module's guarded funding account is accepted" "prize-draw initialized"
+  (smartpacts.prize-draw.initialize (smartpacts.token-stub.funding-account)))
+(commit-tx)
+(env-sigs [])
+;; a full round: the fee must land in the stub's funding account, net of the two crank
+;; shares. The round sells and draws by the calendar the operator names; the first
+;; ticket opens it; the clock drives sales and the draw instant, the heights drive the
+;; candidate blocks.
+(env-chain-data { "block-height": 1000, "block-time": (time "2026-09-15T12:00:00Z") })
+(begin-tx)(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(smartpacts.prize-draw.create-raffle "fee" 1.0 0.06 [1.0] 0 false 0.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.schedule-round "fee" (time "2026-09-16T00:00:00Z") (time "2026-10-15T06:00:00Z") (time "2026-10-15T14:00:00Z"))
+(commit-tx)(env-sigs [])
+(begin-tx)(env-chain-data { "block-height": 1001, "block-time": (time "2026-09-16T00:00:00Z") })(env-sigs [ { "key": "9111111111111111111111111111111111111111111111111111111111111111", "caps": [ (coin.TRANSFER "k:9111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "fee") 100.0) ] } ])
+(expect "REV-3b the first ticket opens the round" "bought 50 ticket(s) in fee round 1"
+  (smartpacts.prize-draw.buy "fee" "k:9111111111111111111111111111111111111111111111111111111111111111" 50 []))
+(smartpacts.prize-draw.buy "fee" "k:9111111111111111111111111111111111111111111111111111111111111111" 50 [])(commit-tx)
+(env-sigs [])
+;; at the draw instant the draw is opened from block 1020: candidates 1022..1024; block
+;; 1022 is recorded from 1023 and the draw is sent in that same block
+(begin-tx)(env-chain-data { "block-height": 1020, "block-time": (time "2026-10-15T14:00:00Z"), "sender": "k:anyone" })(smartpacts.prize-draw.open-draw "fee" 1)(commit-tx)
+(begin-tx)(env-chain-data { "block-height": 1023, "prev-block-hash": "REV-1022", "sender": "k:b070000000000000000000000000000000000000000000000000000000000005" })(free.block-history.attest)
+(let ((f0 (coin.get-balance (smartpacts.token-stub.funding-account))))
+  (smartpacts.prize-draw.draw "fee" 1 "k:c4a4000000000000000000000000000000000000000000000000000000000009")
+  (expect "REV-4 the draw credited the stub's funding account with the fee net of the bounty pool: 6.0 - 1.2" 4.8
+    (- (coin.get-balance (smartpacts.token-stub.funding-account)) f0)))
+(expect "REV-4b the bounty pool went to the recorder and the drawer, half each" { "recorder": 10.6, "drawer": 10.6 }
+  { "recorder": (coin.get-balance "k:b070000000000000000000000000000000000000000000000000000000000005"), "drawer": (coin.get-balance "k:c4a4000000000000000000000000000000000000000000000000000000000009") })
+(commit-tx)
+(expect "REV-5 the pool emptied" 0.0 (coin.get-balance (smartpacts.prize-draw.pool-account "fee")))
+(expect "REV-6 the books balance" true (at 'ok (smartpacts.prize-draw.pool-status "fee")))
+;; the escape's dust goes the same way: a 3-ticket round with a bonus that does not divide,
+;; whose draw nobody ever opens
+(env-chain-data { "block-height": 2000, "block-time": (time "2026-10-16T00:00:00Z") })
+(begin-tx)(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] }, { "key": "9111111111111111111111111111111111111111111111111111111111111111", "caps": [ (coin.TRANSFER "k:9111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "dust") 1.0) ] } ])
+(smartpacts.prize-draw.create-raffle "dust" 1.0 0.06 [1.0] 0 false 1.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.schedule-round "dust" (time "2026-10-17T00:00:00Z") (time "2026-10-18T00:00:00Z") (time "2026-10-18T06:00:00Z"))
+(smartpacts.prize-draw.seed-raffle "dust" "k:9111111111111111111111111111111111111111111111111111111111111111" 1.0)
+(commit-tx)(env-sigs [])
+(begin-tx)(env-chain-data { "block-height": 2001, "block-time": (time "2026-10-17T00:00:00Z") })(env-sigs [ { "key": "9111111111111111111111111111111111111111111111111111111111111111", "caps": [ (coin.TRANSFER "k:9111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "dust") 3.0) ] } ])
+(smartpacts.prize-draw.buy "dust" "k:9111111111111111111111111111111111111111111111111111111111111111" 3 [])(commit-tx)
+(env-sigs [])
+;; a day past the draw instant with the draw never opened, the round escapes
+(begin-tx)(env-chain-data { "block-height": 2020, "block-time": (time "2026-10-19T06:00:01Z") })
+(let ((f0 (coin.get-balance (smartpacts.token-stub.funding-account))))
+  (expect "REV-7 nobody opened the draw, so the round escapes after the grace" "dust round 1 escaped: the draw was never opened" (smartpacts.prize-draw.escape "dust" 1))
+  (expect "REV-8 the indivisible remainder of the 1.0 bonus over 3 tickets went to the stub's account" 0.000000000001
+    (- (coin.get-balance (smartpacts.token-stub.funding-account)) f0)))
+(commit-tx)
+(print "REVENUE SUITE COMPLETE")

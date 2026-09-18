@@ -1,0 +1,73 @@
+name: ci
+
+# ===========================================================================
+# EVERYTHING THIS REPOSITORY CLAIMS, RUN ON EVERY PUSH.
+#
+# What runs here is exactly what you run locally: pact/tests/run-tests.sh,
+# unchanged, with no CI-only subset. A CI that runs a reduced set teaches you
+# to trust a green tick that means less than you think.
+#
+# Nothing here reaches a network other than the pinned engine download. There
+# is no deploy step, no key and no secret: this workflow cannot publish or
+# sign anything.
+# ===========================================================================
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # PINNED BY CONTENT, NOT BY TAG. A tag is mutable and a release asset can be
+  # replaced; the sha256 is what makes "CI ran Pact 5.4ce" a fact rather than a
+  # hope. Re-pin only when deliberately moving engine version, and re-measure
+  # BOTH values.
+  PACT_URL: https://github.com/kda-community/pact-5/releases/download/5.4ce/pact-5.4ce-b769-ubuntu-24.04.tar.gz
+  PACT_TARBALL_SHA256: 7370d33fa1e69474921bdd853a56c608c9eee89f73fe0a4f2e7215a7ce065849
+  PACT_BINARY_SHA256: 6c329662af8b06b8bf3b93fa886557769d9948ddd2899b94f465fe89f6339b16
+
+jobs:
+  ci:
+    # 24.04 is not cosmetic: the pinned tarball is the ubuntu-24.04 build.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Pact 5.4ce (content-pinned)
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o pact.tar.gz "$PACT_URL"
+          echo "${PACT_TARBALL_SHA256}  pact.tar.gz" | sha256sum -c -
+          mkdir -p pact-dist && tar xzf pact.tar.gz -C pact-dist
+          echo "${PACT_BINARY_SHA256}  pact-dist/pact" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin" && install -m755 pact-dist/pact "$HOME/.local/bin/pact"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Engine identity
+        run: |
+          set -euo pipefail
+          command -v pact
+          pact --version
+          # The gates fail closed without python3. Prove it is here rather than
+          # discovering it as several identical failures further down.
+          python3 --version
+
+      # The static gate, the arity gate, the frozen-fixture check and all five
+      # suites — the same script a reader runs.
+      - name: Full suite and gates
+        run: pact/tests/run-tests.sh
+
+      # PUBLICATION HYGIENE, ENFORCED FOREVER RATHER THAN ONCE. The scrub that
+      # made this repository publishable is only as durable as the check that
+      # repeats it: a one-time removal decays the next time a paragraph is
+      # copied in from somewhere internal.
+      - name: Publication hygiene
+        run: .github/scripts/public-hygiene-check.sh

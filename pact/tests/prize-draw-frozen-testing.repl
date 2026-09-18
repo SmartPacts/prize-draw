@@ -1,0 +1,187 @@
+;; prize-draw-frozen-testing.repl — WHAT STILL WORKS ONCE THE MODULE IS FROZEN.
+;;
+;; THE PROPERTY THIS EXISTS FOR (founder, 2026-09-17): "fees should survive the freeze, we should
+;; always be able to change the fees of the games. each game should have independent fees."
+;; That is a vision property, and a vision property is only real when a NAMED test goes RED if it
+;; is violated. Until this file existed the founder page carried it as BELIEVED, not proven: no
+;; suite froze the module, so nothing would have noticed if a later edit made a fee change compose
+;; GOVERNANCE and die at the freeze.
+;;
+;; WHAT "FROZEN" MEANS HERE, and why it is the real thing. The freeze is a DEPLOY of a copy whose
+;; GOVERNANCE can never pass again — `(enforce false …)`. It is not a keyset rotation and
+;; not a flag: after it, `acquire-module-admin` is unreachable, the module can never be upgraded,
+;; and anything that composes GOVERNANCE is dead. `fixtures/prize-draw-frozen.pact` is exactly
+;; pact/modules/prize-draw.pact with that ONE substitution and nothing else — the gate runner
+;; re-derives it from the module and fails if the two ever differ, so this fixture cannot drift
+;; away from the contract it is standing in for.
+;;
+;; WHAT IS PROVEN BELOW, in order: governance really is gone; the operator can still re-term a
+;; raffle; the new fee is what a round opened afterwards freezes; settlement pays the new fee to
+;; revenue; and a second raffle settles on ITS OWN fee in the same frozen module — independent
+;; fees, after the freeze, both proven by money moving rather than by reading a row back.
+;;
+;; Run from pact/tests/ (or anywhere: `load` resolves relative to this file).
+
+(load "prize-draw-test-init.repl")
+
+;; ---------------------------------------------------------------------------
+;; personas
+;; ---------------------------------------------------------------------------
+(env-data
+  { "fa-ks":  { "keys": ["fa00000000000000000000000000000000000000000000000000000000000001"], "pred": "keys-all" }
+  , "fb-ks":  { "keys": ["fb00000000000000000000000000000000000000000000000000000000000002"], "pred": "keys-all" }
+  , "frec-ks": { "keys": ["fc00000000000000000000000000000000000000000000000000000000000003"], "pred": "keys-all" } })
+(begin-tx)
+(test-capability (coin.COINBASE))
+(coin.coinbase "k:fa00000000000000000000000000000000000000000000000000000000000001" (read-keyset "fa-ks") 1000.0)
+(coin.coinbase "k:fb00000000000000000000000000000000000000000000000000000000000002" (read-keyset "fb-ks") 1000.0)
+(coin.coinbase "k:fc00000000000000000000000000000000000000000000000000000000000003" (read-keyset "frec-ks") 1.0)
+(commit-tx)
+(env-data {})
+
+;; ---------------------------------------------------------------------------
+;; setup, while the module is still upgradeable: this is the ONE governance-gated
+;; call, and it is the one that must be impossible after the freeze
+;; ---------------------------------------------------------------------------
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"
+            , "caps": [ (smartpacts.prize-draw.GOVERNANCE) ] } ])
+(begin-tx)
+(expect "FROZEN-00 setup runs while the module is still upgradeable"
+  "prize-draw initialized"
+  (smartpacts.prize-draw.initialize "draw-revenue"))
+(commit-tx)
+(env-sigs [])
+
+;; ---------------------------------------------------------------------------
+;; two raffles with DIFFERENT fees, created while the module is still upgradeable
+;; ---------------------------------------------------------------------------
+(env-chain-data { "block-height": 5000000, "block-time": (time "2026-09-15T12:00:00Z") })
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(begin-tx)
+(expect "FROZEN-0 raffle A is created with a 5% fee"
+  "raffle frz-a created"
+  (smartpacts.prize-draw.create-raffle "frz-a" 10.0 0.05 [1.0] 0 false 0.0 0 200.0 0.20 [1 1]))
+(expect "FROZEN-0b raffle B is created with a 20% fee — each game carries its own"
+  "raffle frz-b created"
+  (smartpacts.prize-draw.create-raffle "frz-b" 10.0 0.20 [1.0] 0 false 0.0 0 200.0 0.20 [1 1]))
+(commit-tx)
+(env-sigs [])
+
+;; ---------------------------------------------------------------------------
+;; THE FREEZE — deploy the copy whose GOVERNANCE can never pass again
+;; ---------------------------------------------------------------------------
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef", "caps": [] } ])
+(env-data { "ns": "smartpacts", "init": false })
+(begin-tx)
+(load "fixtures/prize-draw-frozen.pact")
+(commit-tx)
+(env-sigs [])
+(env-data {})
+
+(begin-tx)
+(expect-failure "FROZEN-1 governance is gone: the one admin-gated function cannot run again"
+  "prize-draw is frozen"
+  (smartpacts.prize-draw.initialize "draw-revenue"))
+(rollback-tx)
+
+;; The admin signature does not help: it is the capability that is dead, not the key.
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"
+            , "caps": [ (smartpacts.prize-draw.GOVERNANCE) ] } ])
+(begin-tx)
+(expect-failure "FROZEN-1b not even with the admin key signing the governance capability"
+  "prize-draw is frozen"
+  (smartpacts.prize-draw.initialize "draw-revenue"))
+(rollback-tx)
+(env-sigs [])
+
+;; ---------------------------------------------------------------------------
+;; THE FEE, CHANGED AFTER THE FREEZE
+;; ---------------------------------------------------------------------------
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"
+            , "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(begin-tx)
+(expect "FROZEN-2 the operator can still change a raffle's fee on a FROZEN module"
+  "raffle frz-a re-termed for future rounds"
+  (smartpacts.prize-draw.set-terms "frz-a" 10.0 0.10 [1.0] 0 0.0 0 200.0 0.20 [1 1]))
+(expect "FROZEN-3 and the raffle carries the new fee, 5% -> 10%"
+  0.10
+  (at 'rake (smartpacts.prize-draw.get-raffle "frz-a")))
+(smartpacts.prize-draw.schedule-round "frz-a" (time "2026-09-16T00:00:00Z") (time "2026-09-16T01:00:00Z") (time "2026-09-16T01:00:00Z"))
+(smartpacts.prize-draw.schedule-round "frz-b" (time "2026-09-16T00:00:00Z") (time "2026-09-16T01:00:00Z") (time "2026-09-16T01:00:00Z"))
+(commit-tx)
+(env-sigs [])
+
+;; ---- raffle A: a round opened AFTER the freeze, on the NEW fee -------------
+(env-chain-data { "block-height": 5000100, "block-time": (time "2026-09-16T00:00:00Z") })
+(env-sigs [ { "key": "fa00000000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:fa00000000000000000000000000000000000000000000000000000000000001"
+                                       (smartpacts.prize-draw.pool-account "frz-a") 30.0) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.buy "frz-a" "k:fa00000000000000000000000000000000000000000000000000000000000001" 3 [])
+(commit-tx)
+(env-sigs [])
+
+(begin-tx)
+(expect "FROZEN-4 the round opened on a frozen module froze the NEW fee, not the one the raffle had before"
+  0.10
+  (at 'rake (smartpacts.prize-draw.get-round "frz-a" 1)))
+(commit-tx)
+
+(env-chain-data { "block-height": 5000110, "block-time": (time "2026-09-16T01:00:00Z") })
+(begin-tx)(smartpacts.prize-draw.open-draw "frz-a" 1)(commit-tx)
+(begin-tx)
+(env-chain-data { "block-height": 5000113, "prev-block-hash": "frz-a-block-5000112"
+                , "sender": "k:fc00000000000000000000000000000000000000000000000000000000000003" })
+(free.block-history.attest)
+(commit-tx)
+
+(begin-tx)
+(let* ((rev0 (coin.get-balance "draw-revenue"))
+       (res  (smartpacts.prize-draw.draw "frz-a" 1 "k:fc00000000000000000000000000000000000000000000000000000000000003"))
+       (rev1 (coin.get-balance "draw-revenue")))
+  (print (format "FROZEN draw A (10% fee on 30.0 of sales): {}" [res]))
+  ;; fee = 0.10 * 30.0 = 3.0; the crank share is 0.20 of that, so revenue keeps 2.4
+  (expect "FROZEN-5 settlement on the frozen module paid revenue the NEW fee, less the crank share"
+    2.4 (- rev1 rev0)))
+(commit-tx)
+
+;; ---- raffle B: the SAME frozen module, settling on ITS OWN fee -------------
+(env-chain-data { "block-height": 5000200, "block-time": (time "2026-09-16T00:00:00Z") })
+(env-sigs [ { "key": "fb00000000000000000000000000000000000000000000000000000000000002"
+            , "caps": [ (coin.TRANSFER "k:fb00000000000000000000000000000000000000000000000000000000000002"
+                                       (smartpacts.prize-draw.pool-account "frz-b") 30.0) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.buy "frz-b" "k:fb00000000000000000000000000000000000000000000000000000000000002" 3 [])
+(commit-tx)
+(env-sigs [])
+
+(env-chain-data { "block-height": 5000210, "block-time": (time "2026-09-16T01:00:00Z") })
+(begin-tx)(smartpacts.prize-draw.open-draw "frz-b" 1)(commit-tx)
+(begin-tx)
+(env-chain-data { "block-height": 5000213, "prev-block-hash": "frz-b-block-5000212"
+                , "sender": "k:fc00000000000000000000000000000000000000000000000000000000000003" })
+(free.block-history.attest)
+(commit-tx)
+
+(begin-tx)
+(let* ((rev0 (coin.get-balance "draw-revenue"))
+       (res  (smartpacts.prize-draw.draw "frz-b" 1 "k:fc00000000000000000000000000000000000000000000000000000000000003"))
+       (rev1 (coin.get-balance "draw-revenue")))
+  (print (format "FROZEN draw B (20% fee on 30.0 of sales): {}" [res]))
+  ;; fee = 0.20 * 30.0 = 6.0; less the 0.20 crank share, revenue keeps 4.8 — a DIFFERENT number
+  ;; from A's 2.4 in the same frozen module, which is what "each game has its own fee" means.
+  (expect "FROZEN-6 a second raffle settled on ITS OWN fee in the same frozen module"
+    4.8 (- rev1 rev0)))
+(commit-tx)
+
+;; ---------------------------------------------------------------------------
+;; and the module is still frozen at the end — nothing above re-opened governance
+;; ---------------------------------------------------------------------------
+(begin-tx)
+(expect-failure "FROZEN-7 governance is still gone after all of it"
+  "prize-draw is frozen"
+  (smartpacts.prize-draw.initialize "draw-revenue"))
+(rollback-tx)
+
+(print "prize-draw frozen-module suite: fees change, and are paid, after the freeze")

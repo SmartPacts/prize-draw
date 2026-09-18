@@ -1,0 +1,95 @@
+;; prize-draw-test-init.repl — self-contained environment for the prize-draw
+;; suites: a namespace, the coin stack, the keysets, the block record the draw
+;; reads from, the revenue account, and the module.
+;;
+;; The module reads its namespace from transaction data at load, so ONE source
+;; deploys unchanged into a devnet namespace and a mainnet principal one; the
+;; suites use "smartpacts". block-history is DIFFERENT: it lives in `free` on
+;; mainnet and the module names it `free.block-history`, pinned to its code hash, so
+;; the fixture loads it into `free` exactly as mainnet has it.
+;;
+;; Block simulation. (env-chain-data …) MERGES into the previous public data.
+;; block-history's `attest` writes {height-1 -> prev-block-hash} and records the
+;; SENDER as the attester, and the module's `draw` pays that attester a bounty — so a
+;; suite that attests a deciding block must set block-height, prev-block-hash
+;; AND sender together, or it settles against a state no chain can produce.
+
+;; ---- namespaces --------------------------------------------------------------
+(env-data { "ns-admin": ["476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"] })
+(begin-tx)
+(module test-ns GOVERNANCE
+  (defcap GOVERNANCE () (enforce-guard (read-keyset "ns-admin")))
+  (defconst NS-GUARD (create-user-guard (succeed)))
+  (defun succeed () true))
+(define-namespace "smartpacts" test-ns.NS-GUARD test-ns.NS-GUARD)
+(define-namespace "free"       test-ns.NS-GUARD test-ns.NS-GUARD)
+(commit-tx)
+(env-data {})
+
+;; ---- coin stack (root namespace) --------------------------------------------
+(begin-tx)
+(load "../vendor/fixtures/fungible-v2.pact")
+(load "../vendor/fixtures/fungible-xchain-v1.pact")
+(load "../vendor/fixtures/coin.pact")
+(create-table coin.coin-table)
+(create-table coin.allocation-table)
+(commit-tx)
+
+;; ---- keysets ----------------------------------------------------------------
+;; admin (GOVERNANCE) and operator are DIFFERENT keys on purpose: every test that
+;; proves the operator cannot upgrade, and that governance is a separate trust
+;; boundary, depends on it. block-history needs no keyset at all: the deployed
+;; v2.0.0 is attested-only and immutable, with no backfill and no governance.
+(env-data
+  { "admin":       ["476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"]
+  , "operator":    ["09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"] })
+(begin-tx)
+(namespace "smartpacts")
+(define-keyset "smartpacts.prize-draw-admin"            (read-keyset "admin"))
+(define-keyset "smartpacts.prize-draw-operator"         (read-keyset "operator"))
+(commit-tx)
+
+;; ---- free.block-history — the DEPLOYED v2.0.0 source, vendored verbatim --------
+;; Loaded into `free`, exactly as on mainnet, because the module names it
+;; `free.block-history` and PINS its code hash. Loaded under any other name, the
+;; hash differs and the module refuses to load — and that refusal is itself pinned.
+;; Deployed at height 100: the deploy transaction itself sees block 99 as previous.
+(env-data { "ns": "free" })
+(env-chain-data { "chain-id": "1", "block-height": 100, "prev-block-hash": "H99"
+                , "block-time": (add-time (time "1970-01-01T00:00:00Z") 99), "sender": "deployer" })
+(begin-tx)
+(load "../vendor/block-history.pact")
+(commit-tx)
+
+;; ---- the revenue account -----------------------------------------------------
+;; prize-draw does NOT import a module for this: the destination is recorded at
+;; initialize and must already exist.
+(begin-tx)
+(env-data { "rev": ["a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f0098709b0f41a2f2b3b9f0c8ab6"] })
+(coin.create-account "draw-revenue" (read-keyset "rev"))
+(commit-tx)
+
+;; ---- two more funded personas -------------------------------------------------
+;; Funded far beyond anything a suite stakes. They exist so a suite has accounts
+;; beyond the players it funds itself — a second buyer, a crank payee, a recorder.
+(env-data
+  { "seal-ks":  { "keys": ["5ea1000000000000000000000000000000000000000000000000000000000001"], "pred": "keys-all" }
+  , "seal2-ks": { "keys": ["5ea1000000000000000000000000000000000000000000000000000000000002"], "pred": "keys-all" } })
+(begin-tx)
+(test-capability (coin.COINBASE))
+(coin.coinbase "k:5ea1000000000000000000000000000000000000000000000000000000000001" (read-keyset "seal-ks")  10000000.0)
+(coin.coinbase "k:5ea1000000000000000000000000000000000000000000000000000000000002" (read-keyset "seal2-ks") 10000000.0)
+(commit-tx)
+(env-data {})
+
+;; ---- smartpacts.prize-draw --------------------------------------------------
+;; The load-time (enforce-guard <ns>.prize-draw-admin) needs the admin signature.
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef", "caps": [] } ])
+(env-data { "ns": "smartpacts", "init": true })
+(begin-tx)
+(load "../modules/prize-draw.pact")
+(commit-tx)
+(env-sigs [])
+(env-data {})
+
+(print "prize-draw test environment ready")

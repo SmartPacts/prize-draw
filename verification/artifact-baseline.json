@@ -1,0 +1,20 @@
+{
+  "_what": "The recorded identity of the deployed artifact. Gates read the namespace from here rather than restating it, so a gate cannot compare a constant with itself.",
+  "network": "mainnet01",
+  "chain": "2",
+  "ns": "n_48867b242317a0216a67f8c7ca26696b5878e0e3",
+  "module": "prize-draw",
+  "module_hash_on_chain": "r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI",
+  "_module_hash_note": "MEASURED on chain, never computed locally. A Pact 5 module hash covers its dependencies' hashes, and the test suite loads a vendored coin snapshot while mainnet runs a different coin — so a locally computed hash will never equal this and proves nothing. VERIFY.md §1 compares the CODE instead.",
+  "deployed": "2026-09-18",
+  "frozen": false,
+  "admin_predicate": "keys-2",
+  "operator_predicate": "keys-any",
+  "audit_status": "INTERNAL_COLD_REVIEW",
+  "_audit_note": "Reviewed from a cold context by a reviewer with no implementation history, plus an offensive engagement that executed its attacks: 0 critical, 0 high, 0 medium. That is NOT a paid third-party engagement, and we do not present it as one.",
+  "block_record": {
+    "module": "free.block-history",
+    "hash_pinned_by_the_contract": "P3J_LK-Wivmuyw7SB7TzPmfj6t-GCtG3YnfHNAaU2UU",
+    "_note": "The contract pins this by hash in its `use`, so it cannot silently settle from a different record."
+  }
+}
