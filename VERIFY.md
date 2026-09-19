@@ -88,9 +88,10 @@ so you can find it in the module.
 `docs/PRIZE-DRAW-WHAT-IT-DOES.md` is **generated**, not written by hand, by a script in our
 private repository that reads the contract source, the test results and a manifest of which test
 backs which promise. That generator is not published, so from here its ✅ marks are our claim, not
-something you can re-run — and two of them rest on internal attack suites that are not published
-either (the spec's §11 names them). `docs/PRIZE-DRAW-SPEC.md` is the checkable version: every
-property names the public test that fails if it is violated.
+something you can re-run — and seven of them name tests in internal attack suites that are not
+published either. `docs/PRIZE-DRAW-SPEC.md` is the checkable version: every property names the
+public test that fails if it is violated, except two that only an internal suite covers, which its
+§11 names.
 
 Read it against the module and tell us if you find a sentence the code does not support.
 

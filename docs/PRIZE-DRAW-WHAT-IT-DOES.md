@@ -17,6 +17,12 @@ dates the house sets. Starting a new raffle is a transaction, not a new contract
 >
 > **So "you" on this page always means a player.** The house is never "you"; it is always named.
 
+> 🔴 **Until the contract is frozen, the admin key can override the rules on this page.**
+>
+> Everything below describes the contract's own rules, and the admin key is the one exception to
+> all of them: the last line of *What Prize Draw cannot do* says what it can do instead. The
+> contract is not frozen, and freezing it ends this for good.
+
 
 <!-- promise-gate:legend -->
 > **How this page is made.** A script, `.github/scripts/promise-gate.py`, produces this page from
@@ -53,8 +59,9 @@ dates the house sets. Starting a new raffle is a transaction, not a new contract
 
 **What Prize Draw cannot do**
 
-- ✅ **Let anyone choose the winner** — the house included. Three parties can buy a slightly
-  better chance, and *What can still tilt the odds* below says exactly how.
+- ✅ **Let anyone choose the winner** — the house included. Three parties can improve their own
+  chance — a miner holding tickets can roughly double it — and *What can still tilt the odds*
+  below says exactly how.
 - ✅ **Change a round's settings once its first ticket is sold.** A change reaches the next round.
 - ✅ **Take a fee from a refund.**
 - ✅ **Move a pot's money with the operator key.**
@@ -63,7 +70,9 @@ dates the house sets. Starting a new raffle is a transaction, not a new contract
 - 🟡 **Recover a lost key.** If the operator key were lost after the freeze, a bonus waiting in a
   raffle would stay there.
 - ✅ **Stop the admin key from changing the rules, until the contract is frozen**: until then it
-  can publish new code and take money out of any pot.
+  can publish new code and take money out of any pot. 🟡 It can also change any record the contract
+  keeps — a selling round's settings, who owns a ticket, where fees go — in one transaction, with
+  no new code.
 
 ---
 
@@ -77,12 +86,12 @@ dates the house sets. Starting a new raffle is a transaction, not a new contract
 | **Part of the fee** (the raffle's crank share) | Whoever recorded the deciding block and whoever ran the draw, in the proportion the house set for that raffle | Inside the draw transaction |
 | **The rest of the fee** | The house's revenue account | Inside the draw transaction |
 | **A refunded round** | Every buyer: their stake plus their share of any bonus. No fee is taken | When anyone sends the payment — it can only go to the buyer |
-| **The indivisible remainder of a refund** | The house's revenue account — less than one unit per ticket | At the refund |
+| **The indivisible remainder of a refund** | The house's revenue account — less than 0.000000000001 KDA per ticket | At the refund |
 
 ✅ If fewer tickets sold than there are places, the unfilled places merge into first place, so the
 whole prize is always paid out.
 ✅ A place can round to nothing when a round's prize is very small — a tiny round, or a very high
-fee — and then first place takes the whole prize.
+fee — and then first place takes that place's amount as well.
 ✅ A round can never take in more than its ceiling, tickets and bonus together.
 ✅ **The books always balance.** Every pot holds at least its bonus, its unclaimed refunds and its
 undrawn sales, checked after every kind of settlement.
@@ -96,9 +105,12 @@ drawn, and both are refunds.
 in the raffle until a round takes it, and a round starts only when the house schedules one and
 somebody buys a ticket.
 
-> 🔴 **The crank payments are the house's to set, without limits.**
+> 🔴 **The crank payments are the house's to set, within two limits.**
 >
-> ✅ The house can pay the recorder and the drawer in any proportion, including nothing.
+> ✅ The house sets what part of each fee goes to the two cranks: any part above nothing, up to all
+> of it.
+> ✅ The house can split that part between the recorder and the drawer in any proportion, including
+> nothing for one of them, but never nothing for both.
 > ✅ A raffle can be set to send every fee to whoever records the block instead of to the house.
 
 ---
@@ -108,7 +120,8 @@ somebody buys a ticket.
 1. ✅ **The house sets the dates.** For the next round it names three moments, in UTC: when
    selling opens, when it closes, and when the draw happens — for example, selling from the
    first of a month, closing on the fifteenth at 06:00, and drawing the same day at 14:00.
-   ✅ The house can change them, and any other setting, until the first ticket is sold.
+   ✅ The house can change them, and every other setting except whether players pick numbers, until
+   the first ticket is sold.
    ✅ The house chooses how long selling lasts, anywhere from 10 minutes to 365 days.
    ✅ The draw must come within 7 days of closing, and a round can be planned up to 365 days ahead.
    ✅ If nobody buys a ticket, the dates simply lapse and the house sets new ones.
@@ -117,7 +130,7 @@ somebody buys a ticket.
    into that round's prize.
    ✅ From then on people buy until the closing moment, by the chain's own clock.
 3. **The draw moment arrives.**
-   ✅ Anyone opens the draw, which names the next three blocks of the chain as candidates.
+   ✅ Anyone opens the draw, which names three blocks not yet mined as candidates, starting two blocks after the one it lands in.
    ✅ Before that moment nothing exists that could decide the round, so nobody, the house
    included, can know the winner early.
    ✅ The round is decided by the first of the three that gets recorded by the block-history
@@ -134,13 +147,13 @@ somebody buys a ticket.
 while the first is still waiting for its draw, and each settles on its own.
 
 ✅ **Anyone can check the answer before it is paid**: the winners are computable by a stranger
-from the round's public values and the block's hash, and the contract pays nothing else.
+from the round's public values and the block's hash, and the draw pays no other winner.
 
 ---
 
 ## What can still tilt the odds
 
-🟡 **Three parties can buy themselves a slightly better chance; none can pick a winner.**
+🟡 **Three parties can improve their own chance; none can pick a winner.**
 
 - ✅ **Whoever records blocks alone** could skip a candidate it dislikes and take the next of the
   three, or record none and force a refund of the whole round.
@@ -149,7 +162,8 @@ from the round's public values and the block's hash, and the contract pays nothi
   ✅ Forcing that refund is not free for the house: the bonus it put into a round is paid out to
   that round's buyers.
 - 🟡 **A miner who holds tickets** could throw away a block it mined whose hash loses, paying the
-  block reward for one more roll.
+  block reward for one more roll — which roughly doubles a small holding's chance even with very
+  little mining power, and gains more with more.
 - 🟡 **The miner of the block right after a candidate** could leave every recording of it out of
   that block for free, so the next candidate decides. No other recorder can prevent that one,
   because every recording of a block goes through that same next block.
@@ -172,10 +186,13 @@ agree.
 
 | | what it takes | what it covers |
 |---|---|---|
-| **(2 keys)** — the admin key | 📋 **Two of the three devices** must both sign the same transaction. | What **cannot be undone**: naming where fees go, publishing a new version of the contract, locking it forever |
+| **(2 keys)** — the admin key | 📋 **Two of the three devices** must both sign the same transaction. | What **cannot be undone**: naming where fees go, publishing a new version of the contract, locking it forever — and, until it is locked, overriding any rule on this page |
 | **(1 key)** — the operator key | 📋 **Any one** of the three devices is enough. | Running the raffles every day: creating one, changing its settings or dates, adding a bonus, retiring it |
 
 📋 **How many devices each key needs is set when the contract is deployed, not by the contract.**
+🟡 Each key can replace its own devices later: the admin key with two devices signing, and the
+operator key with one device signing — which can shut the others out. The keys live
+outside the contract, so freezing it does not end this.
 
 ✅ **The operator key cannot publish new code.**
 ✅ **None of the operator's changes reaches a round already sold into.**
@@ -186,8 +203,10 @@ agree.
 **Two keys is not "more secure", it is slower.** It is spent only where a mistake cannot be taken
 back.
 ✅ Where fees go is named once, and the contract refuses a second naming.
-A new version or a freeze changes every raffle at once. Everything the operator key does affects
-only the next round, so a mistake there is fixed by doing it again before anyone buys.
+A new version or a freeze changes every raffle at once. Almost everything the operator key does
+affects only the next round, so a mistake there is fixed by doing it again before anyone buys.
+Two of its actions cannot be redone: a bonus, once added, is not given back, and a retired raffle
+stays retired.
 
 ### What a signing device actually shows
 
@@ -196,7 +215,7 @@ signature grants. These are the ones that can appear for this contract.
 
 | permission | what signing it allows | who signs it |
 |---|---|---|
-| `GOVERNANCE` | Naming where fees go, publishing a new version of the contract, or locking it forever | the house, two devices |
+| `GOVERNANCE` | Naming where fees go, publishing a new version of the contract, or locking it forever; until it is locked, also moving any pot's money or changing any record | the house, two devices |
 | `OPERATOR` | Any operator-key operation above | the house, one device |
 | `coin.TRANSFER` | Paying a stated amount of KDA from one account to another — a ticket purchase, or a bonus the house adds | the account paying |
 | `coin.GAS` | Paying the transaction fee | whoever sends the transaction |
@@ -227,7 +246,7 @@ The contract refuses settings it could never honour:
 - a prize ceiling above 100,000 KDA;
 - a prize ceiling that leaves no room for one ticket above the bonus cap;
 - crank weights that are all zero;
-- a raffle name with a space or a control character in it.
+- a raffle name with a space, a tab, a line break or a similar invisible character in it.
 
 ### Buying tickets
 
@@ -241,7 +260,8 @@ The contract refuses settings it could never honour:
 - A purchase without your signature is refused.
 - At most 50 tickets are bought in one transaction.
 - A number already sold in a round cannot be sold again.
-- A pot, or any other contract's account, cannot buy tickets.
+- A pot cannot buy tickets: any account whose name starts with `m:`, as every pot's name does,
+  is refused.
 
 ### The draw
 
@@ -249,7 +269,7 @@ The contract refuses settings it could never honour:
 |---|---|---|
 | 🟢 `open-draw` | A raffle and round | At or after the draw moment, names the three candidate blocks. The candidates are fixed once and cannot be named again. |
 | 🟢 `draw` | A raffle and round, and the account to receive the drawer's share | Settles the round from the deciding block: pays the winners, the two crank shares and the house's revenue, all in this transaction. A round cannot be drawn twice. A pot cannot be named to receive the drawer's share. |
-| 🟢 `preview` | A raffle and round | Exactly what `draw` will pay, and to whom, from the moment the deciding block is on record. |
+| 🟢 `preview` | A raffle and round | The winning tickets, their holders and each place's prize — exactly what `draw` will pay the winners — from the moment the deciding block is on record. It does not show the fee split. |
 | 🟢 `draw-status` | A raffle and round | Whether the draw is open, the three candidates, and which of them is on record. |
 | 🟢 `decidable` | A raffle and round | Whether the round can be drawn right now. |
 
@@ -292,8 +312,8 @@ are listed so this page accounts for every function in the contract, with nothin
 | `now` · `now-time` · `iso` | The chain's current block height and clock, and a date written out for messages. The clock is the previous block's time. |
 | `round-key` · `ticket-key` · `holding-key` · `number-key` | How the contract builds its record keys — rounds · tickets · holdings · picked numbers. |
 | `pool-guard` | Builds the lock on a raffle's pot, which only this contract can open. |
-| `validate-payer` | Refuses another contract's account wherever a caller names an account for money — and every pot is one. |
-| `validate-id` | Refuses a raffle name that is empty, longer than 32 characters, holds a space or a control character, uses a character the records rely on, or could not be a pot's account name. |
+| `validate-payer` | Refuses any account whose name starts with `m:` wherever a caller names an account for money — every pot's name does. It reads the name only. |
+| `validate-id` | Refuses a raffle name that is empty, longer than 32 characters, holds a space, a tab, a line break or a similar invisible character, uses a character the records rely on, or could not be a pot's account name. A few rarer invisible characters, such as a non-breaking space, are still accepted. |
 | `validate-terms` | Every limit a raffle's settings must meet, in one place, so creating and changing a raffle can never check different things. |
 | `round-seed` | Turns a round's key and the deciding block's hash into the number the winners are drawn from. Anyone can recompute it. |
 | `decided-height` | Which of a round's three candidate blocks decides it: the lowest one on record. |
@@ -332,7 +352,8 @@ are listed so this page accounts for every function in the contract, with nothin
    against any other code, this contract refuses to load.
    🟡 That record can never be upgraded, so the dependency cannot change underneath a frozen raffle.
 2. ✅ **Until the contract is frozen, the admin key can publish a new version and take money out of a pot**,
-   and every "cannot" on this page describes the contract as it is now.
+   so every "cannot" on this page describes the contract's own rules, not a limit on that key —
+   see the start of this page.
    🟡 After freezing, no function can ever be changed or repaired.
 3. 🟡 **Once frozen, money can leave a pot only these three ways, and none needs a house key:**
    - 🟢 `draw` — the winners, the two crank shares and the house's revenue, in amounts the round
