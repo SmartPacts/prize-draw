@@ -9,6 +9,9 @@ The first public game on the Prize Draw contract. One round, ten winners, and a 
 >   byte for byte ([VERIFY.md](../VERIFY.md))
 > - The game's pot: `m:n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw:grand-opening` —
 >   the contract holds every ticket payment and the opening bonus here; no key of ours does
+> - Created on chain at block **7243001**, request key
+>   `PsZtiJ4On1jwiODmzHpLdZcMLWc90Ccsddk54if1CgM` — the terms below and the 1,000 KDA bonus were
+>   written in that one transaction
 > - Play at **[smartpacts.io/games](https://smartpacts.io/games/)** · results at
 >   **[smartpacts.io/games/results](https://smartpacts.io/games/results/)**
 
@@ -22,6 +25,7 @@ The first public game on the Prize Draw contract. One round, ten winners, and a 
 | Fee | **5% of ticket money**. None is taken from the bonus |
 | Tickets | No fixed number. Up to 50 per purchase |
 | Prize ceiling | **50,000 KDA** of ticket money plus bonus — room for 4,900 tickets |
+| Sales open | **Saturday 19 September 2026, 15:36:15 UTC** |
 | Sales close, and the draw | **Sunday 27 September 2026, 18:00 UTC** |
 | Rounds | **One.** This game runs once |
 | Who may take part | **18 or older**, and allowed to take part where you are — see [Who may take part](#who-may-take-part) |
