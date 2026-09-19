@@ -1,6 +1,6 @@
 # Verify this yourself
 
-Four checks, in increasing order of what they prove. None of them needs a key, an account, or our
+Five checks, in increasing order of what they prove. None of them needs a key, an account, or our
 permission, and none of them sends a transaction.
 
 If any of this disagrees with what you read elsewhere in this repository — **trust the chain, not
@@ -71,13 +71,64 @@ The runner also fails if any `expect-failure` in the tree was written with too f
 say *why* it expected the failure, and if the frozen-module fixture is anything other than this
 module with its governance body replaced.
 
-## 4. The plain-language description matches the contract
+## 4. The descriptions match the contract
+
+[`docs/PRIZE-DRAW-SPEC.md`](docs/PRIZE-DRAW-SPEC.md) is the engineering statement: every property
+it lists names the tests that fail if it is violated, and every function it cites is cited by name
+so you can find it in the module.
 
 `docs/PRIZE-DRAW-WHAT-IT-DOES.md` is **generated**, not written by hand: every mark, caller, key
 count and quoted limit in it is read out of the contract source and the test results. If it says a
 promise is proven by a test, a named test exists and passed.
 
 Read it against the module and tell us if you find a sentence the code does not support.
+
+## 5. What was deployed, and who holds the keys
+
+Every line of this record is on chain. The calls are read-only and free, from any node on
+mainnet01 chain 2 (for example with `/local` or Chainweaver).
+
+| what | block | request key | gas |
+|---|---:|---|---:|
+| deploy the module | 7240922 | `5Bc0-gs7RFx-HBuIIVXVAZZ_05OWsNe1XhixZm8Dd1s` | 60,992 |
+| `initialize` — names where fees go, once | 7240942 | `TP8zVpAtVFRwtbz0kvz_j2TafiL_JIVAKaXOeAX71H4` | 225 |
+
+Both were signed by **two of the three admin keys**, as the admin keyset requires, plus a separate
+key that only pays gas.
+
+**The keys.** Two keysets govern the module, over the same three public keys:
+
+| keyset | rule | may |
+|---|---|---|
+| `n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw-admin` | `keys-2` — any 2 of the 3 | upgrade or freeze the module (and, while it is not frozen, reach any pool) |
+| `n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw-operator` | `keys-any` — any 1 of the 3 | create games, set their terms, schedule rounds, add a bonus, retire a game |
+
+```
+2d1b2aae29e95a4a7e7a3eb22aa2b6dae8f5a0d269603e5a92275d21304e31aa
+3ce46b93e74d8466ea0681f14ba0fcb6c83cbb3a8c815a0359cdf9c931cde3b2
+729b3842bc5b33b45a1a559f76e407eeba470ac1a2a9664238c4a24db8970538
+```
+
+Under the deployed code, neither keyset can choose a winner, change a round that is already
+selling, or pay a prize the draw did not award. The one exception is the admin keyset's power to
+publish a new version of the module: until the module is frozen, a new version could do any of
+those things. Freezing ends that power permanently; it has not happened.
+
+Check it yourself:
+
+```lisp
+(describe-keyset "n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw-admin")
+(describe-keyset "n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw-operator")
+(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.get-revenue)       ; where fees go
+(at 'hash (describe-module "free.block-history"))                       ; the block record it pins
+```
+
+`get-revenue` returns SPT's funding account,
+`m:n_48867b242317a0216a67f8c7ca26696b5878e0e3.SPT:SPT-funding`. The block record's hash must be
+`P3J_LK-Wivmuyw7SB7TzPmfj6t-GCtG3YnfHNAaU2UU` — the hash this module names when it imports it, so it
+refuses to load against any other code under that name.
+
+The games created on it, each with its own transactions, are in [`games/`](games/).
 
 ---
 

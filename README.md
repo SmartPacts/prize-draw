@@ -47,7 +47,10 @@ pact/modules/     the contract
 pact/tests/       the suite — 5 files, ~590 printed assertions, run-tests.sh runs everything
 pact/vendor/      the dependencies the tests load: a snapshot of the block record, and Kadena's
                   coin + fungible interfaces (not ours — see NOTICE)
-docs/             what the contract does, in plain language, generated from the contract itself
+docs/             what the contract does — PRIZE-DRAW-SPEC.md, the engineering statement with the
+                  tests behind every property, and PRIZE-DRAW-WHAT-IT-DOES.md, the same in plain
+                  language, generated from the contract itself
+games/            every game created on the contract, with its terms and transactions
 verification/     the recorded identity of the deployed artifact
 .github/          the static gate and the CI that runs all of it on every push
 ```
