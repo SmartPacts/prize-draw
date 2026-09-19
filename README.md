@@ -14,8 +14,10 @@ predict when the round was sold**.
 > - **The contract is not frozen.** While it stays upgradeable, its admin keyset (2 of 3 keys) can
 >   redeploy it, and can reach money sitting in raffle pools. Freezing ends that, and it has not
 >   happened yet.
-> - **Nothing is for sale here.** This repository is source code. No tickets are sold from it, it
->   is not an offer or a solicitation, and no public raffle has opened.
+> - **Nothing is for sale here.** This repository is source code: no tickets are sold from it and
+>   nothing in it is an offer or a solicitation. Tickets are sold at
+>   [smartpacts.io/games](https://smartpacts.io/games/), where the first round ran on 2026-09-19 —
+>   one ticket, drawn from block 7241467, paid inside the draw.
 
 ## Which file am I reading?
 
