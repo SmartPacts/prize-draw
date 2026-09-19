@@ -93,8 +93,11 @@ game's pot, where no key of ours can take it back, and we schedule a new date.
 
 The fee is 5% of ticket money. Half of it pays whoever keeps the draw running, equally: the
 account that recorded the deciding block, and the account that settled the round. Both programs
-are open source and anyone may run them; today one of the two block recorders and the settlement
-program are ours, so when they do the work that share comes back to Smart Pacts. The other half
+are open source and anyone may run them — the block recorder,
+[block-history](https://github.com/SmartPacts/block-history#run-your-own-recorder), and the
+settler, [prize-draw-crank](https://github.com/SmartPacts/prize-draw-crank). Today one of the two
+block recorders and the settler are ours, so when they do the work that share comes back to Smart
+Pacts. The other half
 goes to SPT's funding account (`m:n_48867b242317a0216a67f8c7ca26696b5878e0e3.SPT:SPT-funding`),
 which anyone can read on chain. At 500 tickets, for example, the fee is 250 KDA: 62.5 to the
 recorder, 62.5 to the settler and 125 to SPT funding.
