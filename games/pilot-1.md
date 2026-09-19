@@ -39,8 +39,8 @@ All times UTC, 2026-09-19. Every line is a transaction you can look up by its re
 
 Both the draw and the payments happened without anyone at Smart Pacts acting: the settlement
 program ([prize-draw-crank](https://github.com/SmartPacts/prize-draw-crank), account
-`k:a19aabf8f29329c1f4a6833a03d0d4e4226c0cb385b6828123e872f273c20be7`) opened the draw at the
-instant and drew the round as soon as its deciding block was on record. Its two transactions cost
+`k:a19aabf8f29329c1f4a6833a03d0d4e4226c0cb385b6828123e872f273c20be7`) opened the draw 93 seconds
+after its instant and drew the round as soon as its deciding block was on record. Its two transactions cost
 0.0000123 KDA of gas in total (212 gas to open the draw, 1,019 to draw it).
 
 ## Where the money went

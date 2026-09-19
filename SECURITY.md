@@ -18,10 +18,12 @@ There is **no bug bounty**. We would rather say that plainly than imply one.
 
 ## What is at stake
 
-The contract is **live on Kadena mainnet01, chain 2**, and holds real KDA in raffle pools while a
-round is selling. It is **not frozen**: its 2-of-3 admin keyset can still upgrade it, which means a
-problem found today can be fixed — and also means you should judge the operators, not only the
-code. Freezing removes that power permanently, and has not happened.
+The contract is **live on Kadena mainnet01, chain 2**, and holds real KDA in game pools: ticket
+money of rounds not yet drawn, bonuses waiting for or bound to a round, and refunds not yet sent.
+It is **not frozen**: its 2-of-3 admin keyset can still upgrade it and, as module admin, move pool
+money and rewrite any stored record directly. That means a problem found today can be fixed — and
+also means you should judge the operators, not only the code. Freezing removes that power
+permanently, and has not happened.
 
 Please do not test against mainnet. Everything here runs locally — `cd pact/tests && ./run-tests.sh`
 — and the suite already carries fixtures for the failure paths.
@@ -32,5 +34,7 @@ In scope: the contract in `pact/modules/`, the claims this repository makes abou
 recipe in [VERIFY.md](VERIFY.md). **If you can make that recipe report a pass on code the chain is
 not running, tell us urgently** — that is the claim everything else rests on.
 
-Out of scope: the Kadena node software, the `coin` contract, and everything under `pact/vendor/`,
-which is not ours. Please report those upstream.
+Out of scope: the Kadena node software, the `coin` contract and the fungible interfaces (the
+copies under `pact/vendor/fixtures/` are Kadena's) — please report those upstream. The block record
+(`pact/vendor/block-history.pact`) is ours but has its own repository: report it at
+[SmartPacts/block-history](https://github.com/SmartPacts/block-history).

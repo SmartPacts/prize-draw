@@ -23,9 +23,9 @@ echo "== static gate (every .pact and .repl, loaded through the engine and patte
 
 echo
 # ONE CALL PER FILE, and the count is checked: a gate that inspected zero files must FAIL, never
-# pass quietly. A two-argument `expect-failure` gets a result but asserts nothing about WHY it
-# failed, so a suite full of them can be green while proving very little.
-echo "== expect-failure arity (a two-argument expect-failure asserts nothing about WHY)"
+# pass quietly. In Pact 5 `or`, `and` and `+` take exactly TWO operands: a three-operand form loads,
+# passes the static gate, and only throws when that line runs.
+echo "== binary forms (or / and / + take exactly two operands in Pact 5)"
 (
   cd ../..
   nf=$(find pact -name '*.pact' -o -name '*.repl' | wc -l)
@@ -36,6 +36,12 @@ echo "== expect-failure arity (a two-argument expect-failure asserts nothing abo
   [ "$na" -eq "$nf" ] || { echo "   BAD: the checker reported on $na of $nf files"; exit 1; }
   [ "$bad3" -eq 0 ] || { echo "$ar" | grep -E 'forms,' | grep -v ' 0 with 3+ operands' | sed 's/^/   /'; exit 1; }
 ) || BAD=$((BAD+1))
+
+# A two-argument `expect-failure` matches ANY failure, so it asserts nothing about WHY the call
+# failed — an arity error or a typo would pass it. The checker self-tests before scanning and
+# fails if it can parse no file, so it cannot certify an empty scan as clean.
+echo "== expect-failure arity (a two-argument expect-failure asserts nothing about WHY)"
+( cd ../.. && python3 .github/scripts/expect-failure-arity.py pact/tests/*.repl ) || BAD=$((BAD+1))
 
 # The frozen-module suite deploys a copy of this module whose GOVERNANCE can never pass again.
 # That copy must be THIS module with only that one substitution, or the suite proves the freeze

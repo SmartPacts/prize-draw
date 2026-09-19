@@ -1,17 +1,21 @@
 # The Grand Opening
 
-The first public game on the Prize Draw contract. One round, ten winners, and a pot that starts at
-**1,000 KDA** before anyone buys a ticket.
+The first public game on the Prize Draw contract. One round, ten winners, and a pot that started at
+**1,000 KDA** before anyone bought a ticket. **Selling now.**
 
 > **Game `grand-opening`** on Kadena mainnet (`mainnet01`), **chain 2**
 > - Contract: `n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw`, module hash
->   `r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI` — the code in [`pact/modules/`](../pact/modules/),
->   byte for byte ([VERIFY.md](../VERIFY.md))
+>   `r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI` — the `(module …)` form in
+>   [`pact/modules/`](../pact/modules/), byte for byte ([VERIFY.md](../VERIFY.md))
 > - The game's pot: `m:n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw:grand-opening` —
->   the contract holds every ticket payment and the opening bonus here; no key of ours does
+>   the contract holds every ticket payment and the opening bonus here, not a key of ours — with
+>   the one exception stated under [Who can change the contract](#who-can-change-the-contract)
 > - Created on chain at block **7243001**, request key
 >   `PsZtiJ4On1jwiODmzHpLdZcMLWc90Ccsddk54if1CgM` — the terms below and the 1,000 KDA bonus were
 >   written in that one transaction
+> - Round 1 opened at **15:39:19 UTC** on 19 September, block **7243060**, request key
+>   `sU1JicJ5pkKvioHyd5qGlPBEOQ8dTBBmihARKEtVLEg` — Smart Pacts' first 5 tickets, which froze the
+>   terms below into the round and bound the bonus to it
 > - Play at **[smartpacts.io/games](https://smartpacts.io/games/)** · results at
 >   **[smartpacts.io/games/results](https://smartpacts.io/games/results/)**
 
@@ -25,7 +29,7 @@ The first public game on the Prize Draw contract. One round, ten winners, and a 
 | Fee | **5% of ticket money**. None is taken from the bonus |
 | Tickets | No fixed number. Up to 50 per purchase |
 | Prize ceiling | **50,000 KDA** of ticket money plus bonus — room for 4,900 tickets |
-| Sales open | **Saturday 19 September 2026, 15:36:15 UTC** |
+| Sales opened | **Saturday 19 September 2026, 15:36:15 UTC** (the first ticket was bought at 15:39:19) |
 | Sales close, and the draw | **Sunday 27 September 2026, 18:00 UTC** |
 | Rounds | **One.** This game runs once |
 | Who may take part | **18 or older**, and allowed to take part where you are — see [Who may take part](#who-may-take-part) |
@@ -55,12 +59,13 @@ Examples, not predictions: the pot depends only on how many tickets are sold.
 ## How the winner is chosen
 
 1. At **18:00 UTC on 27 September** sales close. From that moment anyone may call `open-draw`
-   (our settlement program does it within moments). That call names **three blocks of the chain
-   that do not exist yet** as candidates.
-2. The **first candidate to be recorded** in the public, permanent block record decides the round.
-   The winners are a pure function of the round's key (`grand-opening|1`) and that block's hash —
-   nobody, including us, has a choice to make once the candidates are named, and nothing can be
-   drawn again.
+   (our settlement program does it within a couple of minutes — the pilot's landed 93 seconds after
+   its instant). That call names **three blocks of the chain that do not exist yet** as
+   candidates, starting two blocks after the one it lands in.
+2. The **lowest of the three that is recorded** in the public, permanent block record decides the
+   round. The winners are a pure function of the round's key (`grand-opening|1`) and that block's
+   hash, and the contract never draws a round twice. Nobody can *pick* the winners; three parties
+   can make a different candidate decide, as disclosed [below](#what-protects-you--and-the-limits).
 3. The pilot round's deciding block arrived **2 minutes 13 seconds** after its announced instant, so
    expect the result a few minutes after 18:00 UTC.
 
@@ -76,8 +81,9 @@ contract's own `draw-ranks` gives the same answer from any node.
 
 **Inside the draw itself.** The transaction that draws the winners pays them in the same moment,
 to the account that bought each winning ticket. There is nothing to claim and nothing expires.
-Payment can only ever go to the buying account — if you lose access to it, nobody can redirect a
-prize.
+Under the contract's rules payment can only ever go to the buying account — if you lose access to
+it, the rules let nobody redirect a prize. The admin override under [Who can change the
+contract](#who-can-change-the-contract) is the one exception.
 
 ## Refunds — exactly two cases
 
@@ -89,9 +95,6 @@ A round is refunded, with **every ticket repaid its price plus an equal part of 
 There is no other refund and no cancellation. A refund can only go to the account that bought the
 tickets. Our settlement program sends it, and the contract lets **anyone** send it (`claim-escape`),
 so it does not depend on us being there.
-
-If **no ticket at all** is sold by the close, no round exists: the 1,000 KDA bonus stays in the
-game's pot, where no key of ours can take it back, and we schedule a new date.
 
 ## Where the fee goes
 
@@ -110,37 +113,50 @@ recorder, 62.5 to the settler and 125 to SPT funding.
 
 **What the contract guarantees:**
 
-- **Nobody can choose the winner.** The decision is a block hash that does not exist when the
-  draw is opened.
+- **Its rules let nobody choose the winner.** The decision is a block hash that does not exist
+  when the draw is opened.
 - **The money is held by the contract**, in the pot above, not by any person. The bonus was paid in
   before the first ticket and cannot be taken back out by the operator.
 - **The terms are frozen by the first ticket.** Price, fee, prize split, ceiling and dates are
   copied into the round the moment its first ticket is sold, and nothing the operator can do
-  changes them for that round afterwards (the admin key's power is stated below). Smart Pacts buys
-  that first ticket at opening.
+  changes them for that round afterwards (the admin keys' power is stated below). Smart Pacts bought
+  the first 5 tickets at opening, in block 7243060.
 - **Everything is public and checkable** — every purchase, the draw, and every payment are
   transactions on Kadena mainnet.
 
-**What could still tilt a draw, and what limits it:**
+**What could still tilt a draw, and what limits it.** None of these lets anyone pick a winner; each
+can only make a different candidate decide — one unpredictable result swapped for another.
 
 - **Whoever records blocks** could stay quiet about a candidate it dislikes, or record none of the
   three and force a refund. *What limits it:* recording is public and permissionless, two
-  independent operators record every mainnet block today, and a candidate recorded by either one
+  independent operators try to record every mainnet block today (together they miss about 8–9% of
+  heights), and a candidate recorded by either one
   settles the round. A forced refund pays every ticket back with its part of the bonus, so it costs
   the house the round rather than winning it.
 - **A player who also mines** could throw away a block it mined whose hash loses. That buys one more
-  chance, never a choice of winner — measured at roughly double the chance even for a very small
-  miner. *What limits it:* the prize ceiling is published before anyone buys.
+  roll, never a choice of winner — measured at roughly double a small ticket share's chance even
+  for a very small miner, and more for a large one. *What limits it:* each discard costs the miner
+  its block reward, and the prize ceiling is published before anyone buys — it caps what is at
+  stake, it does not make discarding unprofitable.
 - **The miner of the block right after a candidate** could leave that candidate unrecorded, so the
-  next one decides instead. More recorders do not prevent this. *What limits it:* it changes which
-  block decides, never who wins — the next candidate is just as unpredictable — and all three
-  would have to be left out to force a refund. Roughly 9% of mainnet heights go unrecorded, which
+  next one decides instead. More recorders do not prevent this. *What limits it:* it swaps one
+  unpredictable result for another, never for a chosen one, and all three would have to be left
+  out to force a refund. Roughly 9% of mainnet heights go unrecorded, which
   is why the draw names three candidates and not one.
 
-**Who can change the contract.** The contract is **not frozen**. Until it is, its admin key — which
-needs two of three separate devices to sign the same transaction — can publish a new version of
-the contract and can take money out of any game's pot. Everything on this page describes the
-contract as it is today. Freezing would end that power permanently; it has not happened.
+### Who can change the contract
+
+The contract is **not frozen**. Until it is, any two of its three admin keys — held on separate
+devices — can **override its rules in a single transaction**: move money out of any game's pot,
+including this one, or rewrite any record the contract keeps, including who owns a ticket, which
+would redirect a prize. It needs no new code, so the module hash and the check in
+[VERIFY.md](../VERIFY.md) would not change; the transaction itself would be public on the chain.
+They can also publish a new version of the contract. Everything on this page describes the
+contract's rules as they are today. Freezing would end that power permanently; it has not happened.
+
+Separately, any **one** of the three keys can redefine the operator keyset — the key that creates
+games and sets their terms for future rounds. The operator cannot touch this game's pot or its
+frozen terms.
 
 ## Check it yourself
 
@@ -148,7 +164,7 @@ Read-only calls, free, from any Kadena node on chain 2 (for example with `/local
 
 ```lisp
 (n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.get-raffle "grand-opening")     ; the terms
-(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.get-round "grand-opening" 1)    ; the round, once it opens
+(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.get-round "grand-opening" 1)    ; the round
 (n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.pool-status "grand-opening")    ; what the pot holds and owes
 (coin.get-balance "m:n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw:grand-opening")
 ```

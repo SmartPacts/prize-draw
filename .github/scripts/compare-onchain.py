@@ -28,5 +28,6 @@ if onchain not in source:
 i = source.index(onchain)
 print(f"VERBATIM: the {len(onchain)} characters the chain runs appear exactly, in order, in")
 print(f"          pact/modules/prize-draw.pact, from character {i}.")
-print(f"          Outside them: {i} characters of header comments and "
-      f"{len(source) - i - len(onchain)} of create-table footer, both outside the (module …) form.")
+print(f"          Outside them: {i} characters before the (module …) form (header comments, the\n"
+      f"          namespace line and a load-time admin check) and {len(source) - i - len(onchain)} after it (the\n"
+      f"          create-table footer). Those ran once in the deploy transaction; they are not stored.")

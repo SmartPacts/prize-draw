@@ -45,6 +45,9 @@ is_missing_msg_data_error() {
 # believed. Pass --allow-no-pact (or set PACT_STATIC_ALLOW_NO_PACT=1) to accept
 # Tier-2-only coverage deliberately.
 ALLOW_NO_PACT="${PACT_STATIC_ALLOW_NO_PACT:-0}"
+# The engine to load files with: $PACT if set (run-tests.sh tells a reader to set it), else `pact`
+# on PATH. Both scripts must honour the same variable, or following the runner's own hint fails.
+PACT_BIN="${PACT:-pact}"
 
 FILES=()
 ARGS=()
@@ -83,10 +86,10 @@ fi
 printf '== pact-static-check :: %d file(s) ==\n' "${#FILES[@]}"
 
 TIER1_UNAVAILABLE=0
-if command -v pact >/dev/null 2>&1; then
+if command -v "$PACT_BIN" >/dev/null 2>&1; then
   printf -- '-- Tier 1: pact <file> / --check-shadowing --\n'
   for f in "${FILES[@]}"; do
-    if ! out="$(pact "$f" 2>&1)"; then
+    if ! out="$("$PACT_BIN" "$f" 2>&1)"; then
       if is_missing_msg_data_error "$out"; then
         emit_warn "$f: module requires tx message data (read-msg/read-keyset) — bare load can't verify; run full .repl harness"
         printf '%s\n' "$out" | sed 's/^/           /'
@@ -95,7 +98,7 @@ if command -v pact >/dev/null 2>&1; then
         printf '%s\n' "$out" | sed 's/^/           /'
       fi
     fi
-    if ! out="$(pact --check-shadowing "$f" 2>&1)"; then
+    if ! out="$("$PACT_BIN" --check-shadowing "$f" 2>&1)"; then
       emit_violation "$f: pact --check-shadowing failed (native shadowing)"
       printf '%s\n' "$out" | sed 's/^/           /'
     fi
@@ -148,12 +151,12 @@ for f in "${FILES[@]}"; do
     violation 'governance/defcap body is literally `true` — anyone can satisfy it'
 
   # Tier-2: weak (`true`-bodied) NON-@event defcaps WITH args — the compose-capability
-  # escape surface (pact-traps §Capabilities). Any such cap gating a DML/value/state
+  # escape surface. Any such cap gating a DML/value/state
   # path is forgeable by a foreign module via compose-capability. WARN (not VIOLATION):
   # weak caps are a legitimate pattern, but each MUST be proven safe with a foreign-
   # compose test, or it is a finding. @event-only caps gate nothing → skipped.
   while IFS='|' read -r wln wname; do
-    [ -n "$wln" ] && emit_warn "$f:$wln weak \`true\`-bodied cap $wname — if it gates value/state it is FORGEABLE via foreign compose-capability on pre-Chainweb32 nodes (fixed in Pact 5.4.1 at/after that fork), and ALWAYS if this module's governance is weak; prove safe with a foreign-compose negative test (pact-traps §Capabilities)"
+    [ -n "$wln" ] && emit_warn "$f:$wln weak \`true\`-bodied cap $wname — if it gates value/state it is FORGEABLE via foreign compose-capability on pre-Chainweb32 nodes (fixed in Pact 5.4.1 at/after that fork), and ALWAYS if this module's governance is weak; prove safe with a foreign-compose negative test"
   done < <(awk '
     # state machine: track the open defcap (name/startln), whether it is @event,
     # and whether its body is bare `true`. Flag weak NON-@event caps.
@@ -212,14 +215,13 @@ for f in "${FILES[@]}"; do
   # that makes a PERMISSIONLESS escrow account unforgeable against the
   # compose-capability escape (Pattern E; capability guards are forgeable via that
   # bug). Downgraded to WARN so the security-justified stopgap can pass the gate.
-  # Every use MUST carry an inline justification and an ADR disposition. The platform
+  # Every use MUST carry an inline justification and a recorded disposition. The platform
   # fix (compose applies guardForModuleCall) SHIPPED in Pact 5.4.1 / chainweb-node 3.2
   # but is fork-gated behind Chainweb32 — so Pattern E is still needed pre-fork, on
   # non-upgraded nodes, and permanently where the owning module's admin is forgeable.
-  # create-module-guard is still PRESENT in 5.4.1 (no removal schedule). See pact-traps
-  # §Capabilities and business/reports/COMPOSE-CAP-ESCAPE/.
+  # create-module-guard is still PRESENT in 5.4.1 (no removal schedule).
   scan_file "$f" 'create-module-guard' \
-    warn 'DEPRECATED create-module-guard — allowed ONLY as the Pattern-E escrow stopgap against the compose-capability escape; require an inline justification + ADR; revert only once the Chainweb32 fix is ACTIVE on your target network (pact-traps §Capabilities)'
+    warn 'DEPRECATED create-module-guard — allowed ONLY as the Pattern-E escrow stopgap against the compose-capability escape; require an inline justification and a recorded disposition; revert only once the Chainweb32 fix is ACTIVE on your target network'
 
   scan_file "$f" '(\(!=[[:space:]]+""[[:space:]]+\(pact-id\)|\(enforce\b[^)]*\(pact-id\))' \
     violation 'pact-id used as an auth guard — gate access on a composed capability instead'

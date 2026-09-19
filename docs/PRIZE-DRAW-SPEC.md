@@ -13,25 +13,35 @@ names do not drift. Where the words here and the code differ, the code is right 
 
 Deployed identity: namespace `n_48867b242317a0216a67f8c7ca26696b5878e0e3`, module `prize-draw`,
 chain 2, module hash `r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI` (the hash excludes comments;
-[VERIFY.md](../VERIFY.md) checks the full source byte for byte).
+[VERIFY.md](../VERIFY.md) checks the stored `(module …)` form byte for byte).
 
 ## 1. Shape
 
 One module, many games. A game (a "raffle" in the code) is a row of terms and a schedule for its
 next round (the `raffle` schema); a round is a row that froze those terms and that schedule at its
-**first ticket** (the `raffle-round` schema). Settlement never reads a live game term — every value
-it uses was frozen into the round. Pinned by unit `TERMS-FROZEN-AT-OPEN`, `OPEN-*`, vision
-`VISION-1..4`.
+**first ticket** (the `raffle-round` schema). Settlement pays and decides only by values frozen
+into the round; the only live values it reads are bookkeeping — the game's `active`,
+`rounds-limit` and waiting bonus, to retire a finished game, and the revenue account. Pinned by unit `TERMS-FROZEN-AT-OPEN`, `OPEN-*`, vision `VISION-1..4`.
 
 Roles and authority:
 
 - **GOVERNANCE** — the admin keyset `<ns>.prize-draw-admin` (**2 of 3** keys): `initialize` once,
-  upgrade, freeze. It also gates the load-time guard at the top of the file.
+  upgrade, freeze. It also gates the load-time guard at the top of the file. 🔴 **Until the module
+  is frozen, GOVERNANCE is also module admin:** after `acquire-module-admin`, one transaction signed
+  by 2 of the 3 keys can move money out of any pool and rewrite any row of any table — a selling
+  round's terms, a ticket's owner, the revenue account — with no new code and no change to the
+  module hash (measured on mainnet by read-only dry run: a ticket's owner rewritten and 1 KDA moved
+  out of the Grand Opening pot with two keys; one key refused). Pinned for pools by unit
+  `TRUST-BOUNDARY-1`; that a freeze ends it is not pinned by a public test (a claim, checked by hand
+  in the REPL). The same 2 keys can redefine the admin keyset.
 - **OPERATOR** — `<ns>.prize-draw-operator` (**any 1 of** the same 3 keys): `create-raffle`,
   `set-terms`, `schedule-round`, `retire-raffle`, `seed-raffle`. Cannot move player money, cannot
   upgrade, cannot reach a live round's frozen terms. Pinned by unit `OPERATOR-CANNOT-UPGRADE`,
-  `AUTH-*`.
-- **Buyers** — any non-module account. The first buyer of a round creates it and chooses nothing:
+  `AUTH-*`. **Any one of the three keys can also redefine the operator keyset** — replacing the
+  other two — because redefining an existing keyset checks only that keyset's own rule (measured on
+  mainnet by read-only dry run). Keysets live outside the module, so a freeze does not end this; a
+  claim about the platform, not a property with a test here.
+- **Buyers** — any account whose name does not start with `m:`. The first buyer of a round creates it and chooses nothing:
   the round's terms and instants are the game's as they stand. Pinned by unit `OPEN-*`.
 - **Anyone** — `open-draw`, `draw`, `escape`, `claim-escape`, and recording blocks in
   `free.block-history`. The sender signs only for gas; every payout inside is installed by the
@@ -41,8 +51,9 @@ There are no sealers, secrets, bonds, reveals or burns. The block alone decides.
 
 **Pools.** One coin account per game, `m:<ns>.prize-draw:<id>`, guarded by a module guard
 (`pool-guard`) — the permanent choice for a module meant to freeze. Every account a caller names
-as a source or destination of money is refused if it is a module account (`validate-payer`),
-because every module guard a module creates is the same authority. Pinned by unit
+as a source or destination of money is refused if its name starts with `m:` (`validate-payer`),
+because every module guard a module creates is the same authority. The check is by NAME: a
+module-guarded account under any other name is not recognised (§11). Pinned by unit
 `TRUST-BOUNDARY-*`, `DRAW-REFUSES-POOL-PAYEE`, `POOL-ISOLATION-*`. *That a foreign module
 composing this module's capabilities cannot spend a pool is pinned by an internal attack suite
 that is not yet published; the public suites do not cover it.*
@@ -51,19 +62,21 @@ that is not yet published; the public suites do not cover it.*
 
 | term | bound | pinned by |
 |---|---|---|
-| price | ≥ 0.1, 12 decimals | unit `CREATE-*`, `TERMS-*` |
-| rake (the fee) | 0 ≤ rake < 1, taken on ticket sales only | unit `CREATE-*`, `ZERO-FEE-*` |
-| tiers | 1..10 shares, each > 0, summing to exactly 1.0 | unit `TIERS-*`, `TIERS-N` |
-| max-tickets | 0 (uncapped) or ≤ 1,000,000; a numbered game needs > 0 | unit `RIFA-*`, `CREATE-*` |
-| seed-cap | 0..100,000 | unit `SEED-N` |
-| rounds-limit | ≥ 0; 0 runs forever | unit `ROUNDS-LIMIT-*`, `LIMIT2-*` |
+| price | ≥ 0.1, 12 decimals | unit `CREATE-*`, `TERMS-*` (the ≥ 0.1 bound; the 12-decimal limit is not pinned by a test) |
+| rake (the fee) | 0 ≤ rake < 1, 12 decimals, taken on ticket sales only | unit `CREATE-*`, `ZERO-FEE-*` (the bounds; the 12-decimal limit is not pinned) |
+| tiers | 1..10 shares, each > 0, summing to exactly 1.0 | unit `CREATE-9..12` (the bounds); `TIERS-*` test how a fund is split |
+| max-tickets | 0 (uncapped) or ≤ 1,000,000; a numbered game needs > 0 | unit `RIFA-*`, `CREATE-*` (the lower bound, ≥ 0, is not pinned) |
+| seed-cap | 0..100,000, 12 decimals | unit `CREATE-15` (the upper bound; the lower bound and the decimal limit are not pinned) |
+| rounds-limit | ≥ 0; 0 runs forever | unit `CREATE-15b` (the bound); `ROUNDS-LIMIT-*`, `LIMIT2-*` (retiring) |
 | max-fund | > 0, ≤ 100,000, and ≥ seed-cap + price | unit `CEIL-*` |
 | bounty-share | > 0, ≤ 1 of the fee | unit `CRANK-N*` |
 | bounty-split | two integer weights [recorder drawer], each ≥ 0, not both zero | unit `CRANK-N*`, `BOUNTY2-*` |
 | id | 1..32 chars, no `:` or `\|`, no character at or below the space (space, tab, newline, every C0 control), and a name coin will accept as this game's pool account (`validate-id`) | unit `CREATE-1..3f` |
 
 `set-terms` additionally requires max-fund ≥ waiting bonus + bound bonus + price (the bonus
-invariant, §6) and a rounds-limit the waiting bonus can still reach. Pinned by unit `STRAND-*`.
+invariant, §6) and a rounds-limit the waiting bonus can still reach. The rounds-limit half is
+pinned by unit `STRAND-*`; the ceiling half is not pinned by any test (removing it leaves every
+suite green) — a claim.
 `MAX-ROUND-FUND` and `MAX-SEED-CAP` are deliberately wide rails; the operational ceiling is each
 game's own `max-fund`.
 
@@ -94,7 +107,7 @@ granularity on mainnet. Pinned by unit `SCHED-*`, `TIME-PREV-*`, `EXPIRE-*`, vis
    `NUMBER-UNIQUE-PER-ROUND`.
 2. **Open the draw** (`open-draw`), anyone, at or after `draws-at`. It writes
    `decide-height = height + DECIDE-DELAY (2)` exactly once — the first of three candidate blocks,
-   none of which exists yet — and emits `DRAW-OPENED`. Until then nothing exists that could decide
+   starting two after the block it lands in, none of which exists yet — and emits `DRAW-OPENED`. Until then nothing exists that could decide
    the round. Pinned by unit `ODRAW-*`, `DRAWNOW-*`, vision `VISION-BLOCK-*`.
 3. **Decide.** The deciding height is the **lowest recorded** of `decide-height`, +1 and +2 in
    `free.block-history` (`decided-height`). That module is pinned by its code hash at import —
@@ -110,7 +123,7 @@ granularity on mainnet. Pinned by unit `SCHED-*`, `TIME-PREV-*`, `EXPIRE-*`, vis
    `preview` giving the same answer read-only. `fund = sales − fee + bonus` is paid to the winners
    inside the transaction: prizes 2..k take `floor(share × fund)` and prize 1 takes the exact
    remainder, so unfilled prizes merge into first place and nothing is left in the pool.
-   `fee = rake × sales`; a `bounty-share` of the fee is split by the round's frozen weights between
+   `fee = rake × sales`, floored to 12 decimals; a `bounty-share` of the fee is split by the round's frozen weights between
    the block's recorder and whoever sent the draw; the rest of the fee goes to the revenue account.
    Payouts are aggregated per distinct account. Pinned by unit `DRAW-*`, `DRAWNOW-*`, `BOUNTY2-*`,
    `LOP-*`, `ALIAS-*`, `ONE-BUDGET-PER-DISTINCT-WINNER`, `FULL-FUND-PAID`, `ALWAYS-A-WINNER`,
@@ -152,7 +165,8 @@ setup rather than aborting. Pinned by revenue `REV-*`, unit `INIT-*`.
 
 - **Bonus invariant:** `max-fund ≥ waiting bonus + bound bonus + price` at every step — `seed-raffle`
   counts bound bonus against the cap, `set-terms` keeps the ceiling above both, and a round's first
-  ticket only moves bonus from waiting to bound. Pinned by unit `STRAND-*`, `SEED-*`.
+  ticket only moves bonus from waiting to bound. Pinned by unit `STRAND-*`, `SEED-*`, except the
+  `set-terms` ceiling check (§2), which no test pins.
 - **A bonus is one-way.** No function returns a bonus to whoever added it; it binds whole to the
   next round at its first ticket, and a one-off game refuses a bonus once its round has opened.
 - **No auto-retire while a bonus waits or is bound:** the rounds-limit retires a game only when
@@ -168,35 +182,45 @@ setup rather than aborting. Pinned by revenue `REV-*`, unit `INIT-*`.
 
 ## 7. The fairness model, and its limits
 
-Nobody can choose a winner: the seed is fixed by a block that did not exist when the round's
-tickets were sold, at a height fixed by whoever opens the draw at the advertised instant, read from
-an immutable record. What remains is disclosed rather than denied, each with what limits it:
+Under the contract's rules nobody can choose a winner: the seed is fixed by a block that did not
+exist when the round's tickets were sold, at a height fixed by whoever opens the draw at the
+advertised instant, read from an immutable record. (The admin override in §1 sits outside these
+rules until the module is frozen.) Three parties can still make a DIFFERENT candidate decide —
+swapping one unpredictable result for another, never for a chosen one. Each is disclosed with what
+limits it:
 
 - **A party recording blocks alone** could decline to record a candidate it dislikes and take the
   next — a best of three at most — or record none of the three and force a refund of the whole
-  round. *What limits it:* recording is permissionless, two independent operators record mainnet
-  chain 2 today, and a candidate recorded by either settles the round. A forced refund books the
+  round. *What limits it:* recording is permissionless, two independent operators try to record
+  every block of mainnet chain 2 today (together they miss about 8–9% of heights), and a candidate
+  recorded by either settles the round. A forced refund books the
   round's bonus to its buyers, so it costs the house the bonus rather than winning anything. Pinned
   by vision `VISION-INFLUENCE-*` and unit `ESC2-*` (the refund path).
 - **A player who also mines** can discard a candidate block it mined whose hash loses, giving up
-  the block reward (0.909283 KDA on chain 2 at height 7242783) for one more roll — measured at
-  roughly double the chance even at a very small hashrate. It never chooses a winner. *What limits
-  it:* the prize ceiling is published before any ticket is sold. A claim about the chain, not a
-  property with a test.
+  the block reward (0.909283 KDA on chain 2 at height 7242783) for one more roll. With ticket share
+  `b` and hashrate share `h`, its chance of winning is `b[1+(1−b)(1−h)] / [1−(1−b)h]` — roughly
+  double a small share's chance even as `h → 0`, and more with more hashrate (at `h = 0.615`, the
+  largest mainnet miner when measured, a 10% share wins about 30%). Closed form, agreed within
+  0.5pp by a 400,000-run Monte Carlo; the measurement is not in this repository. It never chooses
+  a winner. *What limits it:* each discard costs the block reward, and the prize ceiling, published
+  before any ticket is sold, caps what is at stake — it does not make discarding unprofitable. A
+  claim about the chain, not a property with a test.
 - **The miner of the block after a candidate** can leave every record of it out of that block at no
   cost, so the next candidate decides. An independent recorder does not remove this: every
-  recorder's record for a height goes through that same block. *What limits it:* it changes which
-  block decides, never who wins, and all three candidates would have to be left out to force a
-  refund. About 9% of mainnet heights go unrecorded, which is why the draw names three candidates.
+  recorder's record for a height goes through that same block. *What limits it:* it swaps one
+  unpredictable result for another, never for a chosen one, and all three candidates would have to
+  be left out to force a refund. About 9% of mainnet heights go unrecorded, which is why the draw names three candidates.
   A claim about the chain, not a property with a test.
 
-The settlement shares have no floor and no cap: `1.0 [1 0]` sends the whole crank share to the
-recorder (unit `ALLREC-*`); `[0 1]` pays the recorder nothing (unit `ZREC-*`). The fee's
-destination and these shares are protected by operator key custody, not by the contract.
+The settlement share is bounded (`bounty-share` > 0 and ≤ 1 of the fee), but its split has no floor
+and no cap: `1.0 [1 0]` sends the whole share to the recorder (unit `ALLREC-*`); `[0 1]` pays the
+recorder nothing (unit `ZREC-*`). The shares are protected by operator key custody, not by the
+contract; the fee destination can be changed only through the admin override.
 
-**While the module is not frozen**, GOVERNANCE can publish a new version of it and can move money
-out of any pool. Every property on this page describes the contract as deployed. Freezing ends that
-power permanently.
+**While the module is not frozen**, GOVERNANCE can publish a new version of it and, as module
+admin, move money out of any pool and rewrite any stored row (§1). Every property on this page
+describes the contract as deployed and is subject to that. Freezing ends that power permanently;
+the operator keyset's ability to redefine itself is not ended by a freeze.
 
 ## 8. Constants (frozen with the module)
 
@@ -212,7 +236,9 @@ power permanently.
 `RAFFLE-RETIRED` · `RAFFLE-SCHEDULED` · `RAFFLE-SEEDED` · `ROUND-OPENED` (at the first ticket: the
 three instants, frozen price, rake and bonus) · `TICKETS-BOUGHT` · `DRAW-OPENED` (the first candidate
 height) · `DRAWN` (with the deciding block) · `WINNER-PAID` · `FEE-PAID` · `BOUNTY-PAID` (roles
-`record` and `draw`) · `ESCAPED` · `ESCAPE-PAID`. Pinned by unit `CRANK-E*`, `OPEN-*`.
+`record` and `draw`) · `ESCAPED` · `ESCAPE-PAID`. Pinned by unit `CRANK-E*`, `OPEN-*` for most;
+**`DRAWN`, `ESCAPE-PAID`, `RAFFLE-RETIRED` and `RAFFLE-SEEDED` are emitted but no test asserts
+them** (removing any one leaves every suite green) — a claim, checked against the code.
 
 ## 10. Evidence
 
@@ -222,7 +248,8 @@ a static gate over every file and a check that no `expect-failure` was written w
 arguments to assert why it failed. Each suite is scored by its exit code, not by searching its
 output. CI runs the same command on every push.
 
-**Gas** (the worst-case suite, REPL): schedule a round 145 · first ticket 796 · 50-ticket purchase
+**Gas** (the worst-case suite, REPL gas model — mined gas on mainnet runs higher, e.g. opening
+the pilot's draw cost 212 against 125 here): schedule a round 145 · first ticket 796 · 50-ticket purchase
 3,094 · open the draw 125 · draw at ten prizes with thirteen distinct payees 3,039 · escape 392 ·
 refund one account 376 — all far below the 150,000-per-transaction limit.
 
@@ -232,7 +259,7 @@ refund one account 376 — all far below the 150,000-per-transaction limit.
 |---|---:|---|---:|
 | deploy | 7240922 | `5Bc0-gs7RFx-HBuIIVXVAZZ_05OWsNe1XhixZm8Dd1s` | 60,992 |
 | initialize | 7240942 | `TP8zVpAtVFRwtbz0kvz_j2TafiL_JIVAKaXOeAX71H4` | 225 |
-| the pilot, created | 7241405 | `FaV8hcyIGjsQsw0sDzl1wEH7F9FJU56VhuCO6assmQ8` | — |
+| the pilot, created | 7241405 | `FaV8hcyIGjsQsw0sDzl1wEH7F9FJU56VhuCO6assmQ8` | 443 |
 | the pilot, draw opened | 7241465 | `WkSe5S98FeBXXtmF35YwlNxBpFtvNRvp8LLLZIbVvlk` | 212 |
 | the pilot, drawn and paid | 7241470 | `GTevqUrZbdtq6A0c9bR9f0CH-H2WrtPjAadDk79EXMk` | 1,019 |
 | the Grand Opening, created with its schedule and bonus | 7243001 | `PsZtiJ4On1jwiODmzHpLdZcMLWc90Ccsddk54if1CgM` | 776 |
@@ -246,15 +273,48 @@ anyone acting by hand.
 
 - Static typechecking is not supported for this module (untyped `object` values in the payout
   aggregation and the views); every such path is exercised by the suites.
-- Instants are shown to the second in messages and events; a sub-second instant is enforced exactly
-  but printed truncated.
+- Instants are shown to the second in the contract's messages; a sub-second instant is enforced
+  exactly but printed truncated.
 - A round freezes the game's terms as they stand at its first ticket, so an operator re-term ordered
   earlier in the same block reaches that round. `ROUND-OPENED` carries the frozen price and rake,
   so a reader can see what the round actually froze.
-- `pool-guard` is public, so anyone can create a coin account guarded by a game's module guard and
-  then spend it only into that game's tickets, never out — a self-inflicted lock on the actor's own
-  money, which moves nobody else's. Not refused.
+- **The `m:` refusal is by name.** `pool-guard` is public, so anyone can create a coin account under
+  a name that does not start with `m:` and guard it with a game's module guard. Such an account can
+  then be spent — by anyone, holding no key to it — only into tickets of ANY game, whose prizes and
+  refunds go back to that same account. It moves nobody else's money; whoever guards their own
+  account this way has locked it themselves. Not refused.
+- `validate-id` refuses the space, the tab, the newline and every character at or below the space
+  (the C0 controls). It accepts other invisible latin1 characters — DEL, the C1 controls, the
+  non-breaking space — because coin accepts them in an account name.
+- A prize split whose smaller shares round down can leave a place with **0**: prizes 2..k are
+  floored to 12 decimals and prize 1 takes the exact remainder, so a share of `0.0000000000001`
+  pays nothing, and `WINNER-PAID` is still emitted with 0.
+- `preview` returns the winners, their places and their prizes — not the settlement shares or the
+  fee, which `draw` also pays.
+- Unpinned by public tests (the code does it; no test fails without it): the `set-terms` ceiling
+  check, the 12-decimal limits on price, rake and bonus cap, the ≥ 0 lower bounds of max-tickets
+  and seed-cap, four events (§9), and the end of module admin at a freeze.
 - Two properties rest on internal attack suites that are not yet published: foreign-module access
   to a pool (§1) and the load-time refusal of an impostor block record (§3.3).
 - Not built: a numbered game in which an unsold number can win, a consolation for non-winners, and
   prizes that are goods.
+
+## 12. Comments in the deployed contract that are wrong
+
+The contract's comments were deployed with it, verbatim, and cannot be edited without a redeploy.
+These are wrong or dated; this page, not the comment, is right:
+
+| where in `prize-draw.pact` | what the comment says | the truth |
+|---|---|---|
+| header | the draw fixes the candidate blocks "as the next ones on the chain" | they start two blocks after the one the draw lands in (§3.2) |
+| header | cites an internal design record by its number, in the note on what can tilt a draw | that record is not published; §7 states the design |
+| header | "(two record on mainnet today)" | true when written; a dated statement about the network, not about the code |
+| the load-time admin check | "requires the casino admin" | it requires this module's admin keyset, `<ns>.prize-draw-admin` |
+| header | "GOVERNANCE can redeploy and can move pool money" | it can also rewrite any stored row as module admin (§1) |
+| header | "no no-winner branch" | a refunded round has no winner; every *drawn* round has one |
+| the note on the candidate window | one recorder "narrows the gap and cannot close it", repeated in a garbled sentence | §7 gives the measured coverage |
+| next to `pool-guard` | "Pinned by pact/attacks/prize-draw-poolguard-pin.repl" | that suite is internal and not in this repository |
+| above `validate-payer` | a pool named as a bounty payee, "aborting the draw forever" | the payee is chosen per call; another payee draws the round |
+| in `draw` | a module-guarded recorder "could not receive a transfer" | coin credits an account without its guard; only a pool paying itself fails, and the check refuses every `m:` recorder anyway |
+| above the `raffle-round` schema | "nothing in settlement ever reads a live raffle field" | it reads live bookkeeping to retire a finished game (§1) |
+| `validate-id`'s error message | "id must not contain a space or a control character" | the C1 controls and some invisible latin1 are accepted (§11) |
