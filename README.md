@@ -63,11 +63,18 @@ decides the round, and the winner is a pure function of the round's key and that
 There is no re-roll: no second attempt can be minted, and nobody has a choice to make after the
 outcome is knowable.
 
-**What can still tilt a draw, said plainly:** the house cannot choose the winner; a party recording
-blocks alone could pick the best of three by staying silent, or force a refund by recording none; a
-player who also mines can discard a candidate block it mined whose hash loses; and the miner of the
-block *after* a candidate can leave every record of it out, so the next candidate decides instead.
-Each is bounded to those three candidates or a refund. **None of them selects a winner.**
+**What can still tilt a draw, and what limits each one.** None of these selects a winner, and two
+of the three are measured rather than hypothetical.
+
+| the possibility | what limits it |
+|---|---|
+| A party recording blocks alone could stay silent about a candidate it dislikes, or record none of the three and force a refund | Recording is permissionless and the recorder is open source; **two independent operators record every mainnet block today**, and a candidate recorded by either settles the round. A forced refund pays every ticket back with its equal part of any bonus, so it costs the house the round rather than winning it |
+| A player who also mines could discard a block it mined whose hash loses — **measured at roughly 2× even at tiny hashrate** (closed form, agreed within 0.5pp by a 400,000-run Monte Carlo) | It buys one more chance, never a choice of winner, weighed against a prize ceiling published before any ticket is sold |
+| The miner of the block *after* a candidate can leave every record of it out, at no cost, so the next candidate decides. **More recorders do not prevent this one** — every recorder's attest travels through that same block | It changes *which* block decides, never who wins: the next candidate is equally unpredictable, and all three would have to be left out to force a refund. Roughly 9% of mainnet heights go unrecorded, which is why the draw uses three candidates and not one |
+
+The honest summary: **influence over *which* block decides exists and is disclosed; influence over
+*who wins* does not.** More independent recorders and more independent cranks make each row
+harder, which is why both programs are public.
 
 ## Two admin tiers
 
