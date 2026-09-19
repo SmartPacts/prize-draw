@@ -19,6 +19,15 @@ predict when the round was sold**.
 >   [smartpacts.io/games](https://smartpacts.io/games/), where the first round ran on 2026-09-19 —
 >   one ticket, drawn from block 7241467, paid inside the draw.
 
+## Games on mainnet
+
+| game | what it is |
+|---|---|
+| [**The Grand Opening**](games/grand-opening.md) | One round, ten winners, a pot that starts at 1,000 KDA; 10 KDA a ticket; draw Sunday 27 September 2026, 18:00 UTC |
+
+Each game's page carries its full terms, how its winners are chosen, and the read-only calls that
+let you check it on chain yourself.
+
 ## Which file am I reading?
 
 | | |
