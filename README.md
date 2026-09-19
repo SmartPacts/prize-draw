@@ -103,7 +103,7 @@ public so that anyone can run one.
 
 ## Reporting a problem
 
-See [SECURITY.md](SECURITY.md). Email **security@smartpacts.io**.
+See [SECURITY.md](SECURITY.md) — open a **GitHub security advisory** on this repository.
 
 ## Licence
 
