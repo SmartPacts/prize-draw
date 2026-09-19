@@ -24,6 +24,7 @@ predict when the round was sold**.
 | game | what it is |
 |---|---|
 | [**The Grand Opening**](games/grand-opening.md) | One round, ten winners, a pot that starts at 1,000 KDA; 10 KDA a ticket; draw Sunday 27 September 2026, 18:00 UTC |
+| [**The pilot**](games/pilot-1.md) | Finished. The first mainnet round: one ticket, drawn from block 7241467 and paid by the settlement program, 2026-09-19 |
 
 Each game's page carries its full terms, how its winners are chosen, and the read-only calls that
 let you check it on chain yourself.

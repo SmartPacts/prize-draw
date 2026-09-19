@@ -22,7 +22,7 @@ The first public game on the Prize Draw contract. One round, ten winners, and a 
 | Fee | **5% of ticket money**. None is taken from the bonus |
 | Tickets | No fixed number. Up to 50 per purchase |
 | Prize ceiling | **50,000 KDA** of ticket money plus bonus — room for 4,900 tickets |
-| Sales close, and the draw | **Sunday 27 September 2026, 18:00 UTC** (12:00 in Mexico City) |
+| Sales close, and the draw | **Sunday 27 September 2026, 18:00 UTC** |
 | Rounds | **One.** This game runs once |
 | Who may take part | **18 or older**, and allowed to take part where you are — see [Who may take part](#who-may-take-part) |
 
