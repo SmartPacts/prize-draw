@@ -1,9 +1,9 @@
-# Prize Draw — raffles decided by a block that nobody picks
+# Prize Draw — raffles decided by a block that did not exist when their tickets were sold
 
 A Pact 5 smart contract for Kadena. Many raffles run as configuration rows on one state machine:
 each has its own price, fee, prize split, supply and pool. A round exists from its first ticket,
 sells on a calendar, and is decided by the hash of a block **that did not exist when the round was
-sold and that nobody picks**.
+sold**. Nobody can pick the winner under the contract's rules; what can still tilt a draw is below.
 
 > ## 🟢 DEPLOYED — Kadena mainnet (mainnet01)
 >
@@ -45,8 +45,8 @@ diff against the chain rather than an argument about equivalence. One exception 
 changes and [`VERIFY.md`](VERIFY.md) §1 reports a mismatch against this file — which is how you
 would recognise one.
 
-The contract's comments were deployed with it, verbatim, so they cannot be corrected without a
-redeploy. Where one is wrong, [`docs/PRIZE-DRAW-SPEC.md`](docs/PRIZE-DRAW-SPEC.md) §12 says so.
+The file is kept exactly as it was deployed, comments included, so a comment is never corrected in
+place. Where one is wrong, [`docs/PRIZE-DRAW-SPEC.md`](docs/PRIZE-DRAW-SPEC.md) §12 says so.
 
 ## What is in here
 

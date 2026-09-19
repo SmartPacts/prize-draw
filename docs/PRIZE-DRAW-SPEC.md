@@ -299,18 +299,24 @@ anyone acting by hand.
 - Not built: a numbered game in which an unsold number can win, a consolation for non-winners, and
   prizes that are goods.
 
-## 12. Comments in the deployed contract that are wrong
+## 12. Comments in the deployed file that are wrong
 
-The contract's comments were deployed with it, verbatim, and cannot be edited without a redeploy.
-These are wrong or dated; this page, not the comment, is right:
+`prize-draw.pact` is kept byte for byte as it was sent in the deploy transaction. Comments inside
+its `(module …)` form are stored on chain with the code; the header above that form was sent in
+the same transaction but is not stored. Either way, correcting a comment in place would make the
+file differ from what was deployed, so none is edited. These are wrong or dated; this page, not the
+comment, is right. The frozen-module test fixture repeats every one of them, because it is this file
+with only its governance replaced.
 
 | where in `prize-draw.pact` | what the comment says | the truth |
 |---|---|---|
 | header | the draw fixes the candidate blocks "as the next ones on the chain" | they start two blocks after the one the draw lands in (§3.2) |
 | header | cites an internal design record by its number, in the note on what can tilt a draw | that record is not published; §7 states the design |
 | header | "(two record on mainnet today)" | true when written; a dated statement about the network, not about the code |
+| header | "Nobody can choose a winner. Three parties can buy themselves a slightly better chance" | under the contract's rules nobody can, but until the freeze the admin keys can override those rules (§1, and the box at the top of the [README](../README.md)); and a miner holding tickets roughly doubles a small holding's chance, more with more hashrate (§7) |
 | the load-time admin check | "requires the casino admin" | it requires this module's admin keyset, `<ns>.prize-draw-admin` |
 | header | "GOVERNANCE can redeploy and can move pool money" | it can also rewrite any stored row as module admin (§1) |
+| header | the fee is "frozen into each round at open so it can never reach money already staked" | true of the contract's own functions; until the freeze, module admin can rewrite a round's stored terms, its fee included (§1) |
 | header | "no no-winner branch" | a refunded round has no winner; every *drawn* round has one |
 | the note on the candidate window | one recorder "narrows the gap and cannot close it", repeated in a garbled sentence | §7 gives the measured coverage |
 | next to `pool-guard` | "Pinned by pact/attacks/prize-draw-poolguard-pin.repl" | that suite is internal and not in this repository |

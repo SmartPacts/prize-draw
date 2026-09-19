@@ -25,6 +25,12 @@ money and rewrite any stored record directly. That means a problem found today c
 also means you should judge the operators, not only the code. Freezing removes that power
 permanently, and has not happened.
 
+The day-to-day operator keyset needs only **one** of the same three keys to create games, set
+their terms for future rounds, schedule rounds, add a bonus and retire a game. Any one key can also
+redefine that keyset and shut the other two out, and because keysets live outside the module, a
+freeze does not end that. Under the contract's rules the operator keys cannot move pool money or
+change a round that is already selling.
+
 Please do not test against mainnet. Everything here runs locally — `cd pact/tests && ./run-tests.sh`
 — and the suite already carries fixtures for the failure paths.
 
