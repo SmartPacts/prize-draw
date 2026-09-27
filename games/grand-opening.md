@@ -1,7 +1,10 @@
 # The Grand Opening
 
 The first public game on the Prize Draw contract. One round, ten winners, and a pot that started at
-**1,000 KDA** before anyone bought a ticket. **Selling now.**
+**1,000 KDA** before anyone bought a ticket.
+
+> **Finished.** Drawn and paid on Sunday 27 September 2026 at 18:03 UTC — 2,330 KDA to ten
+> winners in one transaction. See [The result](#the-result).
 
 > **Game `grand-opening`** on Kadena mainnet (`mainnet01`), **chain 2**
 > - Contract: `n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw`, module hash
@@ -14,17 +17,95 @@ The first public game on the Prize Draw contract. One round, ten winners, and a 
 >   `PsZtiJ4On1jwiODmzHpLdZcMLWc90Ccsddk54if1CgM` — the terms below and the 1,000 KDA bonus were
 >   written in that one transaction
 > - Round 1 opened at **15:39:19 UTC** on 19 September, block **7243060**, request key
->   `sU1JicJ5pkKvioHyd5qGlPBEOQ8dTBBmihARKEtVLEg` — Smart Pacts' first 5 tickets, which froze the
+>   `sU1JicJ5pkKvioHyd5qGlPBEOQ8dTBBmihARKEtVLEg` — the first 5 tickets, bought by our founder from their
+>   personal account, which froze the
 >   terms below into the round and bound the bonus to it
 > - Play at **[smartpacts.io/games](https://smartpacts.io/games/)** · results at
 >   **[smartpacts.io/games/results](https://smartpacts.io/games/results/)**
+
+## The result
+
+**140 tickets from 6 accounts**, so the pot was 1,000 + 9.5 × 140 = **2,330 KDA**. Everything
+below happened on chain without anyone signing by hand: both transactions were sent by the
+settlement program's account, `k:a19aabf8f29329c1f4a6833a03d0d4e4226c0cb385b6828123e872f273c20be7`.
+
+All times UTC, Sunday 27 September 2026.
+
+| When | What | Block | Request key |
+|---|---|---:|---|
+| 18:00:00 | Sales closed | — | — |
+| 18:01:39 | Draw opened by the settlement program; candidates: blocks 7266386, 7266387, 7266388 | 7266384 | `asiHj1BaIORVnHiN5mPGGtexHgwlMIeAMlD3ALRQ4PE` |
+| 18:02:08 | **Block 7266386 mined — the first candidate, and it was recorded, so it decided the round.** Hash `nWW4WUxevDx6180JVyCLNbia5hemX-fGwU0m_3wzIko` | 7266386 | — |
+| 18:03:43 | Drawn and every prize paid, in one transaction | 7266389 | `IYbgjB68rWIGFLLOaoHFcbniqr3TzxES90c6PHXdYCQ` |
+
+### The winners
+
+The draw seed is **235687867729757000**. Ticket positions count from 0 in the order tickets were sold.
+
+| Place | Ticket position | Account | Prize (KDA) |
+|---|---:|---|---:|
+| 1st | 86 | `k:1d6423d75f567e8180673d2183d358626310b21dbddde869c688e3a593f6b7d0` | 932 |
+| 2nd | 108 | `k:3ab114faea8b2b67f69035c302da81b3099ae79213969ebcd6fde69861ed7403` | 349.5 |
+| 3rd | 91 | `k:1d6423d75f567e8180673d2183d358626310b21dbddde869c688e3a593f6b7d0` | 233 |
+| 4th | 115 | `k:3ab114faea8b2b67f69035c302da81b3099ae79213969ebcd6fde69861ed7403` | 116.5 |
+| 5th | 46 | `k:3ab114faea8b2b67f69035c302da81b3099ae79213969ebcd6fde69861ed7403` | 116.5 |
+| 6th | 37 | `k:3ab114faea8b2b67f69035c302da81b3099ae79213969ebcd6fde69861ed7403` | 116.5 |
+| 7th | 35 | `k:3ab114faea8b2b67f69035c302da81b3099ae79213969ebcd6fde69861ed7403` | 116.5 |
+| 8th | 40 | `k:3ab114faea8b2b67f69035c302da81b3099ae79213969ebcd6fde69861ed7403` | 116.5 |
+| 9th | 106 | `k:3ab114faea8b2b67f69035c302da81b3099ae79213969ebcd6fde69861ed7403` | 116.5 |
+| 10th | 14 | `k:d9b53147041c2f6bcee9f4756dfd56f51895b3ce46649b51b0c3889313da5b65` | 116.5 |
+
+`k:3ab114…7403` held 75 of the 140 tickets and won seven places; `k:1d6423…b7d0` held 20 and won
+two; `k:d9b531…5b65` held 18 and won one.
+
+**Our founder took part like any other player**, from their personal account `k:1d6423…b7d0`: same
+price, same rules, the same draw. That account also paid the 1,000 KDA opening bonus and receives
+the settlement program's share. In total it put **1,200 KDA** into this game (the bonus plus 20
+tickets) and received **1,182.5 KDA** back (1,165 in prizes plus the 17.5 settlement share) —
+17.5 KDA less than it paid in.
+
+### Where the money went
+
+The pot held 2,400 KDA: 1,400 of ticket money plus the 1,000 bonus. The draw paid it all out in
+one transaction, one transfer per account:
+
+| To | Amount (KDA) | Why |
+|---|---:|---|
+| `k:1d6423d75f567e8180673d2183d358626310b21dbddde869c688e3a593f6b7d0` | 1,182.5 | 1st and 3rd place (932 + 233), plus the settler's share of the fee (17.5) |
+| `k:3ab114faea8b2b67f69035c302da81b3099ae79213969ebcd6fde69861ed7403` | 1,048.5 | 2nd and 4th to 9th place (349.5 + 6 × 116.5) |
+| `k:d9b53147041c2f6bcee9f4756dfd56f51895b3ce46649b51b0c3889313da5b65` | 116.5 | 10th place |
+| `k:747ac0446a857c28c6caa0ed3f73a96bf4693495ce8612b60fe3a31d93da5997` | 17.5 | The recorder's share: our recorder, which recorded block 7266386 |
+| `m:n_48867b242317a0216a67f8c7ca26696b5878e0e3.SPT:SPT-funding` | 35 | The other half of the fee, to SPT's funding account |
+
+Total out: 2,400 KDA. The pot was left empty. The fee was 70 KDA (5% of 1,400); none was taken
+from the bonus. The draw cost 1,955 gas and opening it 226.
+
+### Recompute it yourself
+
+```python
+import hashlib
+b = lambda s: int.from_bytes(hashlib.blake2b(s.encode(), digest_size=32).digest(), "big")
+h = "nWW4WUxevDx6180JVyCLNbia5hemX-fGwU0m_3wzIko"   # block 7266386, chain 2
+seed = b(f"prize-draw|grand-opening|1|{h}") % 10**18
+print(seed)            # 235687867729757000 — the seed the contract stored
+taken = []
+for i in range(1, 11):
+    c = b(f"{seed}|grand-opening|1|{i}") % (140 - i + 1)
+    for r in sorted(taken):
+        if c >= r: c += 1
+    taken.append(c)
+print(taken)           # [86, 108, 91, 115, 46, 37, 35, 40, 106, 14] — the stored ticket positions
+```
+
+The owner of each position is `(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.get-ticket
+"grand-opening" 1 <position>)`, read-only from any node on chain 2.
 
 ## At a glance
 
 | | |
 |---|---|
 | Ticket | **10 KDA** |
-| Opening bonus | **1,000 KDA**, paid into the pot by Smart Pacts, from `k:1d6423d75f567e8180673d2183d358626310b21dbddde869c688e3a593f6b7d0`, in the transaction that creates the game — before any ticket |
+| Opening bonus | **1,000 KDA**, paid into the pot by our founder, from their personal account `k:1d6423d75f567e8180673d2183d358626310b21dbddde869c688e3a593f6b7d0`, in the transaction that creates the game — before any ticket |
 | Winners | **10** — first place 40% of the pot, second 15%, third 10%, and seven more at 5% each |
 | Fee | **5% of ticket money**. None is taken from the bonus |
 | Tickets | No fixed number. Up to 50 per purchase |
@@ -103,8 +184,8 @@ account that recorded the deciding block, and the account that settled the round
 are open source and anyone may run them — the block recorder,
 [block-history](https://github.com/SmartPacts/block-history#run-your-own-recorder), and the
 settler, [prize-draw-crank](https://github.com/SmartPacts/prize-draw-crank). Today one of the two
-block recorders and the settler are ours, so when they do the work that share comes back to Smart
-Pacts. The other half
+block recorders and the settler are ours; the settler pays what it earns to our founder's personal
+account. The other half
 goes to SPT's funding account (`m:n_48867b242317a0216a67f8c7ca26696b5878e0e3.SPT:SPT-funding`),
 which anyone can read on chain. At 500 tickets, for example, the fee is 250 KDA: 62.5 to the
 recorder, 62.5 to the settler and 125 to SPT funding.
@@ -119,8 +200,8 @@ recorder, 62.5 to the settler and 125 to SPT funding.
   before the first ticket and cannot be taken back out by the operator.
 - **The terms are frozen by the first ticket.** Price, fee, prize split, ceiling and dates are
   copied into the round the moment its first ticket is sold, and nothing the operator can do
-  changes them for that round afterwards (the admin keys' power is stated below). Smart Pacts bought
-  the first 5 tickets at opening, in block 7243060.
+  changes them for that round afterwards (the admin keys' power is stated below). Our founder bought
+  the first 5 tickets at opening, from their personal account, in block 7243060.
 - **Everything is public and checkable** — every purchase, the draw, and every payment are
   transactions on Kadena mainnet.
 

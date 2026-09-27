@@ -24,7 +24,7 @@ sold**. Nobody can pick the winner under the contract's rules; what can still ti
 
 | game | what it is |
 |---|---|
-| [**The Grand Opening**](games/grand-opening.md) | Selling. One round, ten winners, a pot that started at 1,000 KDA; 10 KDA a ticket; draw Sunday 27 September 2026, 18:00 UTC |
+| [**The Grand Opening**](games/grand-opening.md) | Finished. One round, 140 tickets, drawn from block 7266386 on 2026-09-27: 2,330 KDA paid to ten winners by the settlement program |
 | [**The pilot**](games/pilot-1.md) | Finished. The first mainnet round: one ticket, drawn from block 7241467 and paid by the settlement program, 2026-09-19 |
 
 Each game's page carries its full terms, how its winners are chosen, and the read-only calls that

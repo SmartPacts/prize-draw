@@ -9,7 +9,7 @@ nobody stepping in by hand once the ticket was sold.
 > Kadena mainnet (`mainnet01`), **chain 2**, contract
 > `n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw`.
 
-**The only ticket was ours.** Smart Pacts bought it from its own account to run the proof; nobody
+**The only ticket was our founder's.** They bought it from their personal account to run the proof; nobody
 else took part. It won the prize back, less the fee.
 
 ## Terms
@@ -50,7 +50,7 @@ The round took in **1 KDA**. The draw paid it all out in one transaction:
 | To | Amount (KDA) | Why |
 |---|---:|---|
 | `k:1d6423d75f567e8180673d2183d358626310b21dbddde869c688e3a593f6b7d0` | **0.95** | The prize: 1 KDA less the 5% fee |
-| the same account | 0.0125 | The settler's share of the fee — this account is where our settlement program sends what it earns. Paid together with the prize as one transfer of 0.9625 |
+| the same account | 0.0125 | The settler's share of the fee — our settlement program pays what it earns to our founder's personal account. Paid together with the prize as one transfer of 0.9625 |
 | `k:6223803aea271b4b7484590d63905bb406f9d77a5297a2fc8d59b9af8c69ceed` | 0.0125 | The recorder's share: the recorder that recorded block 7241467 — the second recorder, operated independently on its own server |
 | `m:n_48867b242317a0216a67f8c7ca26696b5878e0e3.SPT:SPT-funding` | 0.025 | The other half of the fee, to SPT's funding account |
 
