@@ -4,7 +4,7 @@
 
 Prize Draw is one raffle contract on Kadena Community Edition (kda-chain.org) that runs any
 number of raffles. Each raffle is a set of settings — ticket price, fee, how the prize splits
-across places, how many tickets exist, and how the two cranks are paid — and each round runs on
+across places, how many tickets exist, and what part of the fee pays whoever runs the draw — and each round runs on
 dates the house sets. Starting a new raffle is a transaction, not a new contract.
 
 > **Two different people appear on this page, and the difference matters.**
@@ -13,7 +13,7 @@ dates the house sets. Starting a new raffle is a transaction, not a new contract
 >   fees and dates, adds bonuses, and names where fees go. Some of its actions need more devices
 >   than others.
 > - **A player** is anyone who buys a ticket. A player needs no permission from the house to buy,
->   and — like anyone at all — can open a round's draw, run it, or trigger a refund.
+>   and — like anyone at all — can run a round's draw or trigger a refund.
 >
 > **So "you" on this page always means a player.** The house is never "you"; it is always named.
 
@@ -52,16 +52,15 @@ dates the house sets. Starting a new raffle is a transaction, not a new contract
 
 - ✅ Run many raffles from one contract, each with its own pot that no other raffle can spend.
 - ✅ Sell tickets only between the dates the house sets, by the chain's own clock.
-- ✅ Decide each round by a block of the chain that did not exist when its tickets were sold.
+- ✅ Decide each round by a public drand random number that did not exist while its tickets were on sale.
 - ✅ Pay the winners inside the draw itself, so there is nothing to claim.
-- ✅ Refund every buyer, in exactly two cases, when a round cannot be drawn.
-- ✅ Send the fee, less what the cranks are paid, to the house's revenue account.
+- ✅ Refund every buyer when nobody draws a round for 90 days after its random number was due.
+- ✅ Send the fee, less what the drawer is paid, to the house's revenue account.
 
 **What Prize Draw cannot do**
 
-- ✅ **Let anyone choose the winner** — the house included. Three parties can improve their own
-  chance — a miner holding tickets can roughly double it — and *What can still tilt the odds*
-  below says exactly how.
+- ✅ **Let anyone choose the winner** — the house, a player or a miner. *What the draw depends on*
+  below says what it does rely on.
 - ✅ **Change a round's settings once its first ticket is sold.** A change reaches the next round.
 - ✅ **Take a fee from a refund.**
 - ✅ **Move a pot's money with the operator key.**
@@ -83,7 +82,7 @@ dates the house sets. Starting a new raffle is a transaction, not a new contract
 | Money | Who gets it | When |
 |---|---|---|
 | **Ticket sales, less the fee, plus any bonus** | The winners, split across places by the raffle's prize shares | Inside the draw transaction — nobody claims anything |
-| **Part of the fee** (the raffle's crank share) | Whoever recorded the deciding block and whoever ran the draw, in the proportion the house set for that raffle | Inside the draw transaction |
+| **Part of the fee** (the raffle's crank share) | Whoever ran the draw | Inside the draw transaction |
 | **The rest of the fee** | The house's revenue account | Inside the draw transaction |
 | **A refunded round** | Every buyer: their stake plus their share of any bonus. No fee is taken | When anyone sends the payment — it can only go to the buyer |
 | **The indivisible remainder of a refund** | The house's revenue account — less than 0.000000000001 KDA per ticket | At the refund |
@@ -99,19 +98,17 @@ undrawn sales, checked after every kind of settlement.
 ✅ The house can change a raffle's fee for its future rounds, and can still do it once the contract
 is frozen.
 
-✅ **Players' money cannot get stuck.** Every round has exactly two ways out if it cannot be
-drawn, and both are refunds.
+✅ **Players' money cannot get stuck.** A round that nobody draws for 90 days after its random
+number was due refunds every buyer.
 ✅ One exception, and it is the house's rather than a player's: a bonus the house has added sits
 in the raffle until a round takes it, and a round starts only when the house schedules one and
 somebody buys a ticket.
 
-> 🔴 **The crank payments are the house's to set, within two limits.**
+> 🔴 **The drawer's payment is the house's to set.**
 >
-> ✅ The house sets what part of each fee goes to the two cranks: any part above nothing, up to all
-> of it.
-> ✅ The house can split that part between the recorder and the drawer in any proportion, including
-> nothing for one of them, but never nothing for both.
-> ✅ A raffle can be set to send every fee to whoever records the block instead of to the house.
+> ✅ The house sets what part of each fee goes to whoever runs the draw: any part above nothing, up
+> to all of it.
+> ✅ A raffle can be set to send every fee to whoever runs the draw instead of to the house.
 
 ---
 
@@ -129,44 +126,42 @@ somebody buys a ticket.
    ✅ It fixes the settings and the dates for everyone, and any bonus the house added is locked
    into that round's prize.
    ✅ From then on people buy until the closing moment, by the chain's own clock.
-3. **The draw moment arrives.**
-   ✅ Anyone opens the draw, which names three blocks not yet mined as candidates, starting two blocks after the one it lands in.
-   ✅ Before that moment nothing exists that could decide the round, so nobody, the house
-   included, can know the winner early.
-   ✅ The round is decided by the first of the three that gets recorded by the block-history
-   contract, which only ever records what the chain itself produced.
-4. ✅ **Anyone runs the draw**, the moment that block is on record.
+3. **The random number is fixed.**
+   ✅ The first ticket also fixes which drand random number decides the round: the one drand
+   publishes about 3 minutes (177 to 180 seconds) after the draw moment. drand is a public network that publishes a new
+   signed random number every few seconds; nobody can choose one, and each can be checked.
+   ✅ That number does not exist until after the last ticket could have been bought, so nobody —
+   the house, a player or a miner — can know the winner while tickets are on sale.
+4. ✅ **Anyone runs the draw**, once drand has published that number.
+   ✅ The contract checks the number really is drand's before using it, and refuses any other.
    ✅ The winners come from the tickets actually sold, so there is always a winner, and they are
    paid inside that same transaction. There is nothing to claim.
 5. **The fee is split.**
-   ✅ Part of the fee pays the two who ended the round — whoever recorded the deciding block and
-   whoever ran the draw — in whatever proportion the house set for that raffle.
+   ✅ Part of the fee pays whoever ran the draw, in the part the house set for that raffle.
    The rest goes to the house's revenue account.
 
 ✅ Two rounds can be live at once: once one round's selling closes, the next can start selling
 while the first is still waiting for its draw, and each settles on its own.
 
 ✅ **Anyone can check the answer before it is paid**: the winners are computable by a stranger
-from the round's public values and the block's hash, and the draw pays no other winner.
+from the round's public values and drand's published number, and the draw pays no other winner.
 
 ---
 
-## What can still tilt the odds
+## What the draw depends on
 
-🟡 **Three parties can improve their own chance; none can pick a winner.**
+🟡 **drand can stop, but it cannot choose.**
 
-- ✅ **Whoever records blocks alone** could skip a candidate it dislikes and take the next of the
-  three, or record none and force a refund of the whole round.
-  ✅ That works only while nobody else records: once any recorder records a candidate, the lowest
-  recorded candidate decides, whoever recorded it.
-  ✅ Forcing that refund is not free for the house: the bonus it put into a round is paid out to
-  that round's buyers.
-- 🟡 **A miner who holds tickets** could throw away a block it mined whose hash loses, paying the
-  block reward for one more roll — which roughly doubles a small holding's chance even with very
-  little mining power, and gains more with more.
-- 🟡 **The miner of the block right after a candidate** could leave every recording of it out of
-  that block for free, so the next candidate decides. No other recorder can prevent that one,
-  because every recording of a block goes through that same next block.
+- ✅ **drand publishing.** If drand stopped publishing, a round could not be drawn; once nobody has
+  drawn it for 90 days after its number was due, anyone can refund every buyer.
+- 🟡 **drand's operators acting together.** Enough of them working together could learn a number
+  before it is published. They still could not choose it.
+- 🟡 **The chain stalling.** If the whole chain stopped for longer than about 3 minutes, or a miner rewrote
+  more than that much of it, the one round selling at that moment could take a ticket after its
+  number was public.
+- ✅ **A losing buyer, after the refund opens.** A buyer who can see they lost could send the refund
+  instead of the draw — but only after 90 days in which nobody, including every winner, ran
+  the draw.
 
 ---
 
@@ -231,9 +226,9 @@ operator action in the same transaction — the device shows the level, not the 
 
 | | What it takes | What it does |
 |---|---|---|
-| 🔴 `create-raffle` **(1 key)** | A name, ticket price, fee, prize shares, ticket supply, whether players pick numbers, bonus cap, round limit, prize ceiling, crank share and crank weights | Creates a raffle. Refused until setup has named where fees go. A name already taken is refused. |
+| 🔴 `create-raffle` **(1 key)** | A name, ticket price, fee, prize shares, ticket supply, whether players pick numbers, bonus cap, round limit, prize ceiling, crank share and two crank weights, which are checked but not used | Creates a raffle. Refused until setup has named where fees go. A name already taken is refused. |
 | 🔴 `set-terms` **(1 key)** | The same settings, except whether players pick numbers, which is fixed for the life of the raffle | Changes a raffle's settings for future rounds only. Refused if the new round limit would strand a waiting bonus. |
-| 🔴 `schedule-round` **(1 key)** | Three moments: selling opens, selling closes, the draw | Sets when the next round sells and draws. It can be set again until that round's first ticket. The next round cannot start selling before the current one closes. |
+| 🔴 `schedule-round` **(1 key)** | Three moments: selling opens, selling closes, the draw | Sets when the next round sells and which drand number decides it. It can be set again until that round's first ticket. The next round cannot start selling before the current one closes. |
 | 🔴 `retire-raffle` **(1 key)** | A raffle | Stops new rounds. A round already selling is left untouched. There is no un-retire. Retiring is refused while a bonus waits or is locked into a live round. |
 | 🔴 `seed-raffle` **(1 key)** | A raffle, the account paying, an amount | Adds a bonus to the prize, locked whole into the next round at its first ticket. A bonus above the raffle's bonus cap is refused. A bonus on a raffle's last round is refused, because no round could ever pay it. |
 
@@ -267,26 +262,25 @@ The contract refuses settings it could never honour:
 
 | | What it takes | What it does |
 |---|---|---|
-| 🟢 `open-draw` | A raffle and round | At or after the draw moment, names the three candidate blocks. The candidates are fixed once and cannot be named again. |
-| 🟢 `draw` | A raffle and round, and the account to receive the drawer's share | Settles the round from the deciding block: pays the winners, the two crank shares and the house's revenue, all in this transaction. A round cannot be drawn twice. A pot cannot be named to receive the drawer's share. |
-| 🟢 `preview` | A raffle and round | The winning tickets, their holders and each place's prize — exactly what `draw` will pay the winners — from the moment the deciding block is on record. It does not show the fee split. |
-| 🟢 `draw-status` | A raffle and round | Whether the draw is open, the three candidates, and which of them is on record. |
-| 🟢 `decidable` | A raffle and round | Whether the round can be drawn right now. |
+| 🟢 `draw` | A raffle and round, the account to receive the drawer's share, and drand's published number for that round | Checks the number is drand's genuine one for this round, then settles the round: pays the winners, the drawer's share and the house's revenue, all in this transaction. Any other number is refused. A round cannot be drawn twice. A pot cannot be named to receive the drawer's share. |
+| 🟢 `preview` | A raffle and round still waiting for its draw, and drand's published number for that round | The winning tickets, their holders and each place's prize — exactly what `draw` will pay the winners. It does not show the fee split. A drawn or refunded round is refused: its result is recorded. |
+| 🟢 `draw-status` | A raffle and round still on sale or waiting for its draw | Which drand number decides it, when drand publishes it, whether that moment has passed, and the moment after which a refund opens. |
+| 🟢 `decidable` | A raffle and round | Whether the round can be drawn right now: it is waiting for its draw and its drand number has been published. |
 
 A draw naming an account that cannot receive fails and changes nothing, and the round is then
 drawn with an account that can.
 
 ### Refunds
 
-✅ If none of the three candidate blocks is recorded, or if nobody opened the draw within 1 day of
-its moment, the round refunds every buyer their stake plus their share of any bonus.
+✅ If nobody draws a round for 90 days after its drand number was due, the round refunds every
+buyer their stake plus their share of any bonus. Until the refund is sent, the round can still be drawn.
 ✅ Each buyer is paid by their own payment: one transaction per account, which anyone can send, and
 the money can only go to the account that bought the tickets.
 🟡 An unclaimed refund never expires: it stays in the pot until someone sends that account's payment.
 
 | | What it takes | What it does |
 |---|---|---|
-| 🟢 `escape` | A raffle and round | Marks a round refunded, in the two cases above. Books every buyer's stake plus bonus share. The refund is closed for good once a candidate is recorded. |
+| 🟢 `escape` | A raffle and round | Marks a round refunded, in the case above. Books every buyer's stake plus bonus share. A drawn round can never be refunded. |
 | 🟢 `claim-escape` | A raffle, a round and an account | Pays one buyer their refund. Anyone can send it; the money goes to the account that bought the tickets. Each account is paid once. |
 
 ### Reading a raffle
@@ -294,7 +288,7 @@ the money can only go to the account that bought the tickets.
 | | What it takes | What it does |
 |---|---|---|
 | 🟢 `get-raffle` | A raffle | Its settings, its next dates, its waiting bonus and its books. |
-| 🟢 `get-round` | A raffle and round | The settings and dates the round froze, its sales, its deciding block and the result. |
+| 🟢 `get-round` | A raffle and round | The settings and dates the round froze, its sales, the drand number that decides it and the result. The two rounds that were decided by a block of the chain before drand show that block's number in the same place. |
 | 🟢 `list-raffles` | — | Every raffle's name. |
 | 🟢 `get-revenue` | — | Where this contract's fees are paid, recorded once at setup. |
 | 🟢 `pool-status` | A raffle | Whether its pot holds at least its bonus, its unclaimed refunds and its undrawn sales. 🟡 For a raffle nothing was ever paid into, this read fails instead of answering, and readers treat that as an empty pot. |
@@ -309,14 +303,14 @@ are listed so this page accounts for every function in the contract, with nothin
 
 | | What it is for |
 |---|---|
-| `now` · `now-time` · `iso` | The chain's current block height and clock, and a date written out for messages. The clock is the previous block's time. |
+| `now-time` · `iso` | The chain's clock, and a date written out for messages. The clock is the previous block's time. |
 | `round-key` · `ticket-key` · `holding-key` · `number-key` | How the contract builds its record keys — rounds · tickets · holdings · picked numbers. |
 | `pool-guard` | Builds the lock on a raffle's pot, which only this contract can open. |
 | `validate-payer` | Refuses any account whose name starts with `m:` wherever a caller names an account for money — every pot's name does. It reads the name only. |
 | `validate-id` | Refuses a raffle name that is empty, longer than 32 characters, holds a space, a tab, a line break or a similar invisible character, uses a character the records rely on, or could not be a pot's account name. A few rarer invisible characters, such as a non-breaking space, are still accepted. |
 | `validate-terms` | Every limit a raffle's settings must meet, in one place, so creating and changing a raffle can never check different things. |
-| `round-seed` | Turns a round's key and the deciding block's hash into the number the winners are drawn from. Anyone can recompute it. |
-| `decided-height` | Which of a round's three candidate blocks decides it: the lowest one on record. |
+| `drand-round-for` | Which drand number a round drawing at a given moment is decided by: the one published about 3 minutes later. |
+| `round-seed` | Checks a drand number against drand's public key and turns it, with the round's key, into the number the winners are drawn from. Anyone can recompute it. |
 | `draw-ranks` · `draw-candidate` · `lift` | Draw the winning tickets from that number — distinct tickets, all of them sold, recomputable by anyone. |
 | `tier-amounts` | Splits the prize across places, with nothing left over. |
 | `merge-payee` | Adds up everything one account is owed in a draw, so each account receives one payment. |
@@ -348,15 +342,15 @@ are listed so this page accounts for every function in the contract, with nothin
 
 ## True of the whole system
 
-1. ✅ **The draw depends on one other contract, the block-history record, pinned to its exact code**:
+1. ✅ **The draw depends on one other contract, the drand checker, pinned to its exact code**:
    against any other code, this contract refuses to load.
-   🟡 That record can never be upgraded, so the dependency cannot change underneath a frozen raffle.
+   🟡 That checker can never be upgraded, so the dependency cannot change underneath a frozen raffle.
 2. ✅ **Until the contract is frozen, the admin key can publish a new version and take money out of a pot**,
    so every "cannot" on this page describes the contract's own rules, not a limit on that key —
    see the start of this page.
    🟡 After freezing, no function can ever be changed or repaired.
 3. 🟡 **Once frozen, money can leave a pot only these three ways, and none needs a house key:**
-   - 🟢 `draw` — the winners, the two crank shares and the house's revenue, in amounts the round
+   - 🟢 `draw` — the winners, the drawer's share and the house's revenue, in amounts the round
      fixed.
    - 🟢 `claim-escape` — a refund, only to the buyer it is owed to.
    - 🟢 `escape` — the indivisible remainder of a refund, to the revenue account.

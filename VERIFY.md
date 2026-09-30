@@ -14,9 +14,10 @@ This is the one that matters, and for this contract it is unusually direct: **th
 chain is the `(module …)` form of the file in `pact/modules/`, verbatim, comments and all.** There
 is no stripped "deploy variant" to reconcile. What this check does not cover: the lines before and
 after that form — the header, the `namespace` line, a load-time admin check and the table-creation
-footer — ran once, in the deploy transaction, together with the two `define-keyset` calls that
-created the keysets, and none of that is stored. The deploy transaction itself (block 7240922, §5)
-carries that code, and anyone can read it from the block's payload.
+footer — ran once, in the transaction that deployed it, and none of that is stored. The transaction
+that put the current code on chain (the upgrade, block 7274939, §5) carries that code, preceded by
+one extra form that refused to run while any round was unsettled; anyone can read it from the
+block's payload.
 
 Two commands. Read both scripts first — they are short, and they only make a read-only `/local`
 request. Pass any node URL you trust as an argument; the default is a public community node.
@@ -26,15 +27,17 @@ python3 .github/scripts/fetch-onchain.py > /tmp/onchain.pact
 python3 .github/scripts/compare-onchain.py /tmp/onchain.pact
 ```
 
-Expected output, measured 2026-09-19:
+Expected output, measured 2026-09-30 after the upgrade:
 
 ```
-VERBATIM: the 69761 characters the chain runs appear exactly, in order, in
-          pact/modules/prize-draw.pact, from character 7241.
-          Outside them: 7241 characters before the (module …) form (header comments, the
+VERBATIM: the 65450 characters the chain runs appear exactly, in order, in
+          pact/modules/prize-draw.pact, from character 7632.
+          Outside them: 7632 characters before the (module …) form (header comments, the
           namespace line and a load-time admin check) and 235 after it (the
           create-table footer). Those ran once in the deploy transaction; they are not stored.
 ```
+
+(Measured 2026-09-19 on the previous version: 69761 characters from character 7241.)
 
 **Why it is two scripts and not a `curl`.** A Pact command carries its own hash, the node checks
 that hash against the exact command *bytes*, and re-serialising the JSON changes those bytes — so
@@ -55,9 +58,9 @@ locally will **never** equal the hash mainnet reports, and a mismatch tells you 
 code.
 
 We learned this the expensive way — on deploy day, against a value we had carried in our own
-documents for weeks. The hash on chain is
-`r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI`; compare it with what `describe-module` reports if you
-like, but the check in §1 is the one that means something.
+documents for weeks. The hash on chain is `ROPuVZ3uzJ2LOLdW-18obFpmmg7XehIV_sQ5H7Taw-s` since the
+upgrade of 2026-09-30 (it was `r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI` before); compare it with
+what `describe-module` reports if you like, but the check in §1 is the one that means something.
 
 To read it from the chain, change `'code` to `'hash` in `fetch-onchain.py`.
 
@@ -88,7 +91,7 @@ so you can find it in the module.
 `docs/PRIZE-DRAW-WHAT-IT-DOES.md` is **generated**, not written by hand, by a script in our
 private repository that reads the contract source, the test results and a manifest of which test
 backs which promise. That generator is not published, so from here its ✅ marks are our claim, not
-something you can re-run — and seven of them name tests in internal attack suites that are not
+something you can re-run — and some of them name tests in internal attack suites that are not
 published either. `docs/PRIZE-DRAW-SPEC.md` is the checkable version: every property names the
 public test that fails if it is violated, except two that only an internal suite covers, which its
 §11 names.
@@ -104,9 +107,15 @@ mainnet01 chain 2 (for example with `/local` or Chainweaver).
 |---|---:|---|---:|
 | deploy the module | 7240922 | `5Bc0-gs7RFx-HBuIIVXVAZZ_05OWsNe1XhixZm8Dd1s` | 60,992 |
 | `initialize` — names where fees go, once | 7240942 | `TP8zVpAtVFRwtbz0kvz_j2TafiL_JIVAKaXOeAX71H4` | 225 |
+| **upgrade in place** — the draw is decided by a drand beacon instead of a block hash; no table or field changed | 7274939 | `qJ_h9Bl4iYHrTk_2PVc37a-Ua82e4lu11pOswqzwZfg` | 101,271 |
 
-Both were signed by **two of the three admin keys**, as the admin keyset requires, plus a separate
-key that only pays gas.
+All three were signed by **two of the three admin keys**, as the admin keyset requires, plus a
+separate key that only pays gas. The upgrade transaction's first form read every game and refused
+to proceed if any round was still waiting for its draw (none was: both games were drawn and
+retired), so no round opened under the old rules could be settled under the new ones. After it
+landed, the code on chain was compared with the transaction's own module form and with this
+repository's file, the two earlier rounds were read back unchanged, and `describe-module`'s
+`tx_hash` was `qJ_h9Bl4iYHrTk_2PVc37a-Ua82e4lu11pOswqzwZfg`.
 
 **The keys.** Two keysets govern the module, over the same three public keys:
 
@@ -135,21 +144,26 @@ Check it yourself:
 (describe-keyset "n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw-admin")
 (describe-keyset "n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw-operator")
 (n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.get-revenue)       ; where fees go
-(at 'hash (describe-module "free.block-history"))                       ; the block record it pins
+(at 'hash (describe-module "n_48867b242317a0216a67f8c7ca26696b5878e0e3.drand"))  ; the beacon verifier it pins
+(at 'tx_hash (describe-module "n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw"))  ; the transaction that deployed the current code
 ```
 
 `get-revenue` returns SPT's funding account,
-`m:n_48867b242317a0216a67f8c7ca26696b5878e0e3.SPT:SPT-funding`. The block record's hash must be
-`P3J_LK-Wivmuyw7SB7TzPmfj6t-GCtG3YnfHNAaU2UU` — the hash this module names when it imports it, so it
-refuses to load against any other code under that name.
+`m:n_48867b242317a0216a67f8c7ca26696b5878e0e3.SPT:SPT-funding`. The verifier's hash must be
+`Y07t-duJmkXkcGth0TfBRg3ThbNR-uh9PdNUd1MKHBQ` — the hash this module names when it imports it, so it
+refuses to load against any other code under that name. The verifier is sealed (its governance can
+never pass), holds no state and is a copy of `pact/vendor/drand.pact`; because it depends on nothing,
+the hash the REPL computes for that file equals the one on chain. The previous version pinned
+`free.block-history` at `P3J_LK-Wivmuyw7SB7TzPmfj6t-GCtG3YnfHNAaU2UU`; the current one does not read it.
 
 The games created on it, each with its own transactions, are in [`games/`](games/).
 
 [`verification/artifact-baseline.json`](verification/artifact-baseline.json) records the same
-identity in machine-readable form, as written on deploy day. We do not edit a published record, so
-two of its notes are corrected here instead: **no check in this repository reads that file**, though
-its first note says gates do; and its review note (0 critical, 0 high, 0 medium) was written before
-we measured module admin on mainnet — it says nothing about that power.
+identity in machine-readable form: the deploy-day record as written, plus an appended `upgrades`
+entry for 2026-09-30. We do not edit a published record, so two of its deploy-day notes are corrected
+here instead: **no check in this repository reads that file**, though its first note says gates do;
+and its review note (0 critical, 0 high, 0 medium) was written before we measured module admin on
+mainnet — it says nothing about that power.
 
 ---
 

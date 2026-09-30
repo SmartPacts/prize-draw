@@ -1,5 +1,10 @@
 # The Grand Opening
 
+> **This round ran under the previous version of the contract**, which decided a round from the hash
+> of a Kadena block. On 2026-09-30 the contract was upgraded in place to decide each round from a
+> drand beacon instead ([`VERIFY.md`](../VERIFY.md) §5); the round's record on chain is unchanged,
+> and everything below describes the rules that decided it, as they were.
+
 The first public game on the Prize Draw contract. One round, ten winners, and a pot that started at
 **1,000 KDA** before anyone bought a ticket.
 

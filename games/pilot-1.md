@@ -1,5 +1,10 @@
 # The pilot (`pilot-1`)
 
+> **This round ran under the previous version of the contract**, which decided a round from the hash
+> of a Kadena block. On 2026-09-30 the contract was upgraded in place to decide each round from a
+> drand beacon instead ([`VERIFY.md`](../VERIFY.md) §5); the round's record on chain is unchanged,
+> and everything below describes the rules that decided it, as they were.
+
 The first round ever run on this contract on mainnet. Its only purpose was to prove the whole
 mechanism with real KDA, real gas and real timing before any public game: create a game, sell a
 ticket, open the draw, record the deciding block, draw, pay the winner, and pay the fee — with

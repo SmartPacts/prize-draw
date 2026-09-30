@@ -12,12 +12,16 @@
 # out of it would break that claim while hiding nothing — the comments are already public on the
 # chain, readable by anyone with `describe-module`. The frozen-module fixture is that same file
 # with one substitution, and must stay so. Both are excluded from the decision-record pattern BY
-# EXACT PATH, never by a wildcard that could quietly cover a new file.
+# EXACT PATH, never by a wildcard that could quietly cover a new file. Two more files are held to
+# the same standard for the same reason: pact/tests/fixtures/prize-draw-v1-mainnet.pact is the
+# PREVIOUS version exactly as the chain stored it (the upgrade suite's fidelity rests on that), and
+# ops/mainnet-deploy/upgrade-precondition.pact is the first form of the upgrade transaction, byte for
+# byte what that transaction's payload carries.
 set -uo pipefail
 cd "$(dirname "$0")/../.." || exit 2
 
 SELF=".github/scripts/public-hygiene-check.sh"
-DEPLOYED_VERBATIM=("pact/modules/prize-draw.pact" "pact/tests/fixtures/prize-draw-frozen.pact")
+DEPLOYED_VERBATIM=("pact/modules/prize-draw.pact" "pact/tests/fixtures/prize-draw-frozen.pact" "pact/tests/fixtures/prize-draw-v1-mainnet.pact" "ops/mainnet-deploy/upgrade-precondition.pact")
 
 mapfile -t FILES < <(git ls-files)
 if [ "${#FILES[@]}" -lt 10 ]; then

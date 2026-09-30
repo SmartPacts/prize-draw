@@ -16,5 +16,25 @@
     "module": "free.block-history",
     "hash_pinned_by_the_contract": "P3J_LK-Wivmuyw7SB7TzPmfj6t-GCtG3YnfHNAaU2UU",
     "_note": "The contract pins this by hash in its `use`, so it cannot silently settle from a different record."
-  }
+  },
+  "upgrades": [
+    {
+      "date": "2026-09-30",
+      "block": 7274939,
+      "request_key": "qJ_h9Bl4iYHrTk_2PVc37a-Ua82e4lu11pOswqzwZfg",
+      "gas": 101271,
+      "module_hash_on_chain": "ROPuVZ3uzJ2LOLdW-18obFpmmg7XehIV_sQ5H7Taw-s",
+      "previous_module_hash": "r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI",
+      "schema_change": false,
+      "what": "The draw is decided by ONE drand evmnet beacon, pinned at a round's first ticket and verified on chain, instead of a block hash. No table or field changed; the two rounds drawn before this keep a block height in decide-height/deciding-block and are refused by every settlement function.",
+      "beacon_verifier": {
+        "module": "n_48867b242317a0216a67f8c7ca26696b5878e0e3.drand",
+        "hash_pinned_by_the_contract": "Y07t-duJmkXkcGth0TfBRg3ThbNR-uh9PdNUd1MKHBQ",
+        "drand_chain": "04f1e9062b8a81f848fded9c12306733282b2727ecced50032187751166ec8c3",
+        "_note": "Sealed (governance can never pass), stateless; the contract pins it by hash in its `use`."
+      },
+      "block_record": "no longer read by the contract",
+      "_note": "Appended, never edited: the entries above this one describe the deploy of 2026-09-18 as they were written then."
+    }
+  ]
 }

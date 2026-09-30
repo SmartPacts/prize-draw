@@ -1,14 +1,16 @@
-# Prize Draw — raffles decided by a block that did not exist when their tickets were sold
+# Prize Draw — raffles decided by a public randomness beacon that did not exist when their tickets were sold
 
 A Pact 5 smart contract for Kadena. Many raffles run as configuration rows on one state machine:
 each has its own price, fee, prize split, supply and pool. A round exists from its first ticket,
-sells on a calendar, and is decided by the hash of a block **that did not exist when the round was
-sold**. Nobody can pick the winner under the contract's rules; what can still tilt a draw is below.
+sells on a calendar, and is decided by a drand beacon **that did not exist when the round was
+sold**, verified on chain. Nobody can pick the winner under the contract's rules; what could still
+affect a draw is below.
 
 > ## 🟢 DEPLOYED — Kadena mainnet (mainnet01)
 >
 > - Namespace `n_48867b242317a0216a67f8c7ca26696b5878e0e3`, module `prize-draw`, **chain 2**
-> - Module hash `r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI`
+> - Module hash `ROPuVZ3uzJ2LOLdW-18obFpmmg7XehIV_sQ5H7Taw-s` (upgraded in place 2026-09-30; before that
+>   `r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI`)
 > - The module on chain is **byte for byte** the `(module …)` form in `pact/modules/prize-draw.pact`
 >   — check it yourself with [`VERIFY.md`](VERIFY.md), which takes about a minute.
 > - 🔴 **The contract is not frozen.** Until it is, any **2 of its 3 admin keys** hold *module
@@ -52,14 +54,17 @@ place. Where one is wrong, [`docs/PRIZE-DRAW-SPEC.md`](docs/PRIZE-DRAW-SPEC.md) 
 
 ```
 pact/modules/     the contract
-pact/tests/       five suites (593 printed assertions) and the loader they share; run-tests.sh
-                  runs everything
-pact/vendor/      the dependencies the tests load: a snapshot of our block record, and Kadena's
-                  coin + fungible interfaces (not ours — see NOTICE)
+pact/tests/       six suites and the loader they share; run-tests.sh runs everything. One suite
+                  replays the previous mainnet version and the upgrade over it
+pact/vendor/      the dependencies the tests load: the drand beacon verifier (a copy of the module
+                  on chain), the block record the previous version read, and Kadena's coin +
+                  fungible interfaces (not ours — see NOTICE)
 docs/             what the contract does — PRIZE-DRAW-SPEC.md, the engineering statement with the
                   tests behind every property, and PRIZE-DRAW-WHAT-IT-DOES.md, the same in plain
                   language
 games/            every game created on the contract, with its terms and transactions
+ops/              the first form of the 2026-09-30 upgrade transaction, byte for byte: it refused to
+                  land while any round was unsettled (the upgrade suite proves it both ways)
 verification/     the recorded identity of the deployed artifact
 .github/          the static gate, the checkers, and the CI that runs all of it on every push
 ```
@@ -78,33 +83,38 @@ you to trust a green tick that means less than you think. It runs the static gat
 checks that `or`, `and` and `+` are always given exactly two operands (Pact 5 refuses more only
 when the line runs), checks that no `expect-failure` was written with too few arguments to assert
 *why* something failed, proves the frozen-module fixture is this module with only its governance
-replaced, and then runs the five suites, scoring each by **exit code** rather than by grepping the
+replaced, and then runs the six suites, scoring each by **exit code** rather than by grepping the
 transcript.
 
 ## How a winner is chosen
 
-A round's draw instant is set when it is scheduled and frozen by its first ticket. At that instant
-anyone — not only us — calls `open-draw`, which names **three candidate blocks that have not been
-mined yet**, starting two blocks after the one it lands in. The lowest of those that gets recorded
-in an immutable, raffle-blind block record decides the round, and the winners are a pure function
-of the round's key and that block's hash. The contract never draws a round twice, and nobody can
-pick the winner.
+A round's draw instant is set when it is scheduled and frozen by its first ticket. That first
+ticket also pins the round to **one drand beacon**: the one drand's public `evmnet` network
+publishes 180 seconds after the draw instant (177 to 180, since drand publishes every 3 seconds).
+Sales close at or before the draw instant, on the chain's own clock, so that beacon does not exist
+while a ticket can still be bought. Once drand publishes it, anyone — not only us — sends it with
+`draw`; the contract verifies the signature against drand's published key through a sealed,
+hash-pinned verifier module, and a forged, altered or wrong-round beacon is refused. The winners
+are a pure function of the round's key and that beacon; the contract never draws a round twice, and
+nobody can pick the winner.
 
-**What can still tilt a draw, and what limits each one.** None of these lets anyone *pick* a
-winner. Each can only make a different candidate decide — swapping one unpredictable result for
-another, like a second roll of the same dice. Two of the three are measured, not hypothetical.
+**What can still affect a draw, and what limits each one.** None of these lets anyone *pick* a
+winner.
 
 | the possibility | what limits it |
 |---|---|
-| A party recording blocks alone could stay silent about a candidate it dislikes, or record none of the three and force a refund | Recording is permissionless and the recorder is open source; **two independent operators try to record every mainnet block today** (together they miss about 8–9% of chain 2's heights), and a candidate recorded by either settles the round. A forced refund pays every ticket back with its equal part of any bonus, so it costs the house the round rather than winning it |
-| A player who also mines could discard a block it mined whose hash loses and let another decide — **measured: a small ticket share's chance of winning roughly doubles even at tiny hashrate, and grows with hashrate** (a miner with 61.5% of blocks, the largest on mainnet when measured, would triple a 10% share's chance); closed form, agreed within 0.5pp by a 400,000-run Monte Carlo — the measurement is not in this repository | It never lets the miner choose a winner, and each discard costs it the block reward (0.909 KDA on chain 2). The prize ceiling, published before any ticket is sold, caps what is at stake — it does not make discarding unprofitable |
-| The miner of the block *after* a candidate can leave every record of it out, at no cost, so the next candidate decides. **More recorders do not prevent this one** — every recorder's record travels through that same block | It swaps one unpredictable result for another, never for a chosen one, and all three candidates would have to be left out to force a refund. About 9% of mainnet heights go unrecorded, which is why the draw uses three candidates and not one |
+| drand stops publishing, so the pinned beacon never exists | The round is not stuck: 90 days after the beacon was due, anyone can trigger its refund, and every ticket gets its price back plus its equal part of any bonus. Until a refund lands, the round can still be drawn normally |
+| Enough of drand's independent operators work together to learn a beacon before it is published | They still could not choose it: each beacon has exactly one valid signature. The same trust is placed in drand by every service that uses it |
+| The Kadena network stalls for longer than 180 seconds right at a round's close, or a miner rewrites that much of the chain, so a ticket is accepted after the beacon is public | The 180-second wait is longer than any gap between blocks measured on this chain (the longest was 136 seconds over 120,001 blocks). It cannot be ruled out, so it is stated |
+| Once the 90-day refund opens, a buyer who can see they lost could send the refund instead of the draw | It needs the house's settlement program and every winner, each able to draw alone at any time, to leave the round untouched for a quarter |
 
-The honest summary: **nobody can pick a winner; three parties can make a different candidate
-decide, and that is disclosed with what limits it.** More independent recorders and more
-independent settlement programs make each row harder, which is why both programs are public.
-Separately, and above all of this, the admin keys can override the contract's rules until it is
-frozen — see the box at the top.
+Before 2026-09-30 the contract decided a round from the hash of a Kadena block instead; the two
+rounds drawn that way are described on their [game pages](games/) with the block that decided each.
+The change was an in-place upgrade, recorded in [`VERIFY.md`](VERIFY.md) §5.
+
+The honest summary: **nobody can pick a winner, and what could stop or expose a draw is disclosed
+with what limits it.** Separately, and above all of this, the admin keys can override the
+contract's rules until it is frozen — see the box at the top.
 
 ## Two admin tiers
 
@@ -116,8 +126,8 @@ frozen — see the box at the top.
 Neither tier can make the contract's own code choose a winner. The operator cannot move pool
 money or change a round that is already selling.
 
-Settling is **nobody's privilege**: opening a draw, drawing, and refunding a round that can never
-be drawn are calls anybody can make, and the contract gives the sender no say in the outcome. That
+Settling is **nobody's privilege**: drawing, and refunding a round that nobody drew for 90 days,
+are calls anybody can make, and the contract gives the sender no say in the outcome. That
 is why a bot can do it — see [SmartPacts/prize-draw-crank](https://github.com/SmartPacts/prize-draw-crank),
 which is public so that anyone can run one.
 
@@ -126,10 +136,11 @@ which is public so that anyone can run one.
 Every line below describes the deployed code. Until the contract is frozen, the admin keys can
 override any of it (the box at the top).
 
-- **It does not pick a winner.** No function lets anyone choose one; the decision is a block hash.
+- **It does not pick a winner.** No function lets anyone choose one; the decision is a drand beacon
+  that has exactly one valid signature, verified on chain.
 - **Every drawn round has a winner.** Winners are drawn from the tickets actually sold, and the
   whole fund is paid out — unfilled prize tiers merge into first place. A round that is refunded
-  instead (the two cases in the spec) has none.
+  instead (the one case in the spec: nobody drew it for 90 days) has none.
 - **It does not make you claim a prize.** Winners are paid inside the draw transaction. There is no
   claim step and nothing expires.
 - **It does not take a fee larger than the sale.** The fee is a fraction below 1, frozen into each
