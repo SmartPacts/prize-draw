@@ -19,7 +19,25 @@ echo "== engine"
 
 echo
 echo "== static gate (every .pact and .repl, loaded through the engine and pattern-scanned)"
-( cd ../.. && ./.github/scripts/pact-static-check.sh ) || BAD=$((BAD+1))
+# Two files fail a BARE load by design and are dispositioned here BY EXACT PATH, never silenced:
+# fixtures/beacons.repl (the genuine-beacon table; its helper names the module, so it loads only
+# after the module — prize-draw-test-init.repl does that) and ops/mainnet-deploy/upgrade-precondition.pact
+# (the first form of the upgrade transaction; it reads the LIVE module, so it loads only inside the
+# upgrade suite, which proves it both ways). Any other VIOLATION is real. A static check that
+# crashed or checked nothing must not read as clean: the summary line and a file count are required.
+( cd ../.. && ./.github/scripts/pact-static-check.sh ) > /tmp/static.out 2>&1
+src=$?
+sfiles=$(sed -n 's/^VIOLATIONs: [0-9]*   WARNs: [0-9]*   files: \([0-9]*\)$/\1/p' /tmp/static.out)
+DISP='pact/tests/fixtures/beacons.repl|ops/mainnet-deploy/upgrade-precondition.pact'
+und=$(grep '^VIOLATION: ' /tmp/static.out | grep -vE "$DISP")
+grep -E '^(VIOLATION|WARN):' /tmp/static.out | cut -c1-160 | sed 's/^/   /'
+if [ -z "$sfiles" ] || [ "$sfiles" -eq 0 ] || { [ "$src" != 0 ] && [ "$src" != 1 ]; }; then
+  echo "   BAD: the static check did not run cleanly (exit $src, files '${sfiles:-none}')"; BAD=$((BAD+1))
+elif [ -n "$und" ]; then
+  echo "   BAD: VIOLATION(s) outside the two dispositioned files:"; echo "$und" | sed 's/^/   /'; BAD=$((BAD+1))
+else
+  echo "   ok: $sfiles files checked, $(grep -c '^VIOLATION: ' /tmp/static.out) VIOLATION(s), all in the dispositioned files"
+fi
 
 echo
 # ONE CALL PER FILE, and the count is checked: a gate that inspected zero files must FAIL, never
@@ -28,8 +46,8 @@ echo
 echo "== binary forms (or / and / + take exactly two operands in Pact 5)"
 (
   cd ../..
-  nf=$(find pact -name '*.pact' -o -name '*.repl' | wc -l)
-  ar=$(find pact -name '*.pact' -o -name '*.repl' | sort | while read -r f; do python3 .github/scripts/pact-arity-check.py "$f" 2>&1; done)
+  nf=$(find pact ops -name '*.pact' -o -name '*.repl' | wc -l)
+  ar=$(find pact ops -name '*.pact' -o -name '*.repl' | sort | while read -r f; do python3 .github/scripts/pact-arity-check.py "$f" 2>&1; done)
   na=$(echo "$ar" | grep -c 'forms,')
   bad3=$(echo "$ar" | grep -E 'forms,' | grep -vc ' 0 with 3+ operands')
   echo "   files on disk: $nf   reported on: $na   with a 3+ operand form: $bad3"
@@ -59,7 +77,7 @@ echo
 echo "== suites"
 for f in prize-draw-unit-testing.repl prize-draw-vision-testing.repl \
          prize-draw-worstcase-testing.repl prize-draw-revenue-testing.repl \
-         prize-draw-frozen-testing.repl; do
+         prize-draw-frozen-testing.repl prize-draw-upgrade-testing.repl; do
   "$PACT" -t "$f" > "/tmp/$f.out" 2>&1
   rc=$?
   n=$(grep -c 'Expect' "/tmp/$f.out" 2>/dev/null || echo 0)

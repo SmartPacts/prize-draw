@@ -1,0 +1,443 @@
+;; prize-draw-upgrade-testing.repl — the drand version is an UPGRADE IN PLACE of the
+;; block-decided contract live on mainnet01 chain 2. This suite deploys that exact
+;; contract (fixtures/prize-draw-v1-mainnet.pact: the repo file whose module form is
+;; character-identical to `describe-module` code on chain 2), plays the two games
+;; mainnet played to completion, upgrades to pact/modules/prize-draw.pact, and proves:
+;;   I.   every row the old contract wrote reads back unchanged through every view;
+;;   II.  a settled old round can be neither drawn, escaped nor claimed again;
+;;   III. a new game on the upgraded contract sells, draws from drand and conserves;
+;;   IV.  the upgrade needs the admin keyset and nothing else;
+;;   V.   THE HAZARD, and the in-transaction precondition that refuses it: a round the
+;;        old code opened holds no drand round — stuck if never opened, escapable at
+;;        once if opened.
+;; No schema changed, so no row needs migrating; section I is what proves that.
+
+;; ---- namespaces --------------------------------------------------------------
+(env-data { "ns-admin": ["476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"] })
+(begin-tx)
+(module test-ns GOVERNANCE
+  (defcap GOVERNANCE () (enforce-guard (read-keyset "ns-admin")))
+  (defconst NS-GUARD (create-user-guard (succeed)))
+  (defun succeed () true))
+(define-namespace "smartpacts" test-ns.NS-GUARD test-ns.NS-GUARD)
+(define-namespace "free"       test-ns.NS-GUARD test-ns.NS-GUARD)
+(define-namespace "n_48867b242317a0216a67f8c7ca26696b5878e0e3" test-ns.NS-GUARD test-ns.NS-GUARD)
+(commit-tx)
+(env-data {})
+
+;; ---- coin stack ----------------------------------------------------------------
+(begin-tx)
+(load "../vendor/fixtures/fungible-v2.pact")
+(load "../vendor/fixtures/fungible-xchain-v1.pact")
+(load "../vendor/fixtures/coin.pact")
+(create-table coin.coin-table)
+(create-table coin.allocation-table)
+(commit-tx)
+
+;; ---- keysets: admin (upgrade) and operator are different keys ------------------
+(env-data
+  { "admin":    ["476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"]
+  , "operator": ["09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"] })
+(begin-tx)
+(namespace "smartpacts")
+(define-keyset "smartpacts.prize-draw-admin"    (read-keyset "admin"))
+(define-keyset "smartpacts.prize-draw-operator" (read-keyset "operator"))
+(commit-tx)
+
+;; ---- both dependencies, as mainnet has them -----------------------------------
+;; The OLD contract pins free.block-history; the NEW one pins the drand verifier.
+;; Mainnet chain 2 carries both, so the upgrade meets both already deployed.
+(env-data { "ns": "free" })
+(env-chain-data { "chain-id": "2", "block-height": 100, "prev-block-hash": "H99"
+                , "block-time": (time "2026-09-10T00:00:00Z"), "sender": "deployer" })
+(begin-tx)
+(load "../vendor/block-history.pact")
+(commit-tx)
+(begin-tx)
+(load "../vendor/drand.pact")
+(commit-tx)
+
+;; ---- revenue account and personas ---------------------------------------------
+(env-data
+  { "rev": ["a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f0098709b0f41a2f2b3b9f0c8ab6"]
+  , "a":   ["a11ce00000000000000000000000000000000000000000000000000000000001"]
+  , "b":   ["b0b0000000000000000000000000000000000000000000000000000000000002"]
+  , "d":   ["d0000000000000000000000000000000000000000000000000000000000000d1"] })
+(begin-tx)
+(coin.create-account "draw-revenue" (read-keyset "rev"))
+(test-capability (coin.COINBASE))
+(coin.coinbase "k:a11ce00000000000000000000000000000000000000000000000000000000001" (read-keyset "a") 5000.0)
+(coin.coinbase "k:b0b0000000000000000000000000000000000000000000000000000000000002" (read-keyset "b") 5000.0)
+(coin.coinbase "k:d0000000000000000000000000000000000000000000000000000000000000d1" (read-keyset "d") 10.0)
+(commit-tx)
+(env-data {})
+
+;; ---- the OLD contract, byte-for-byte mainnet's ----------------------------------
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef", "caps": [] } ])
+(env-data { "ns": "smartpacts", "init": true })
+(begin-tx)
+(load "fixtures/prize-draw-v1-mainnet.pact")
+(commit-tx)
+(env-data {})
+(begin-tx)
+(smartpacts.prize-draw.initialize "draw-revenue")
+(commit-tx)
+(env-sigs [])
+
+;; ---- the two games mainnet played, played to completion on the OLD contract ----
+;; Shapes follow mainnet: `pilot-1` winner-takes-all, one round; `grand-opening`
+;; ten tiers with a house bonus, one round. rounds-limit 1 retires each at its draw.
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [] }
+          , { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
+            , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" "m:smartpacts.prize-draw:grand-opening" 100.0) ] } ])
+(env-chain-data { "block-height": 110, "block-time": (time "2026-09-18T12:00:00Z") })
+(begin-tx)
+(smartpacts.prize-draw.create-raffle "pilot-1" 1.0 0.05 [1.0] 0 false 0.0 1 25.0 0.5 [1 1])
+(smartpacts.prize-draw.create-raffle "grand-opening" 10.0 0.05
+  [0.4 0.15 0.1 0.05 0.05 0.05 0.05 0.05 0.05 0.05] 0 false 1000.0 1 50000.0 0.5 [1 1])
+(smartpacts.prize-draw.seed-raffle "grand-opening" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 100.0)
+(smartpacts.prize-draw.schedule-round "pilot-1" (time "2026-09-18T13:00:00Z") (time "2026-09-18T14:00:00Z") (time "2026-09-18T14:00:00Z"))
+(smartpacts.prize-draw.schedule-round "grand-opening" (time "2026-09-19T00:00:00Z") (time "2026-09-27T18:00:00Z") (time "2026-09-27T18:00:00Z"))
+(commit-tx)
+(env-sigs [])
+
+(env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" "m:smartpacts.prize-draw:pilot-1" 1.0) ] } ])
+(env-chain-data { "block-height": 120, "block-time": (time "2026-09-18T13:30:00Z") })
+(begin-tx)
+(smartpacts.prize-draw.buy "pilot-1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])
+(commit-tx)
+(env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" "m:smartpacts.prize-draw:grand-opening" 120.0) ] }
+          , { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
+            , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" "m:smartpacts.prize-draw:grand-opening" 30.0) ] } ])
+(env-chain-data { "block-height": 130, "block-time": (time "2026-09-20T00:00:00Z") })
+(begin-tx)
+(smartpacts.prize-draw.buy "grand-opening" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 12 [])
+(smartpacts.prize-draw.buy "grand-opening" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 3 [])
+(commit-tx)
+(env-sigs [])
+
+;; pilot-1: opened at block 200, candidates 202..204; 202 recorded from block 203
+(env-chain-data { "block-height": 200, "block-time": (time "2026-09-18T14:05:00Z") })
+(begin-tx)
+(smartpacts.prize-draw.open-draw "pilot-1" 1)
+(commit-tx)
+(env-chain-data { "block-height": 203, "prev-block-hash": "mainnet-like-202", "sender": "k:d0000000000000000000000000000000000000000000000000000000000000d1" })
+(begin-tx)
+(free.block-history.attest)
+(commit-tx)
+(env-chain-data { "block-height": 204 })
+(begin-tx)
+(smartpacts.prize-draw.draw "pilot-1" 1 "k:d0000000000000000000000000000000000000000000000000000000000000d1")
+(commit-tx)
+
+;; grand-opening: opened at block 300, candidates 302..304; 302 recorded from 303
+(env-chain-data { "block-height": 300, "block-time": (time "2026-09-27T18:02:00Z") })
+(begin-tx)
+(smartpacts.prize-draw.open-draw "grand-opening" 1)
+(commit-tx)
+(env-chain-data { "block-height": 303, "prev-block-hash": "mainnet-like-302", "sender": "k:d0000000000000000000000000000000000000000000000000000000000000d1" })
+(begin-tx)
+(free.block-history.attest)
+(commit-tx)
+(env-chain-data { "block-height": 304 })
+(begin-tx)
+(smartpacts.prize-draw.draw "grand-opening" 1 "k:d0000000000000000000000000000000000000000000000000000000000000d1")
+(commit-tx)
+
+;; ---- the state mainnet is in today, asserted on the OLD contract ---------------
+;; The same literals are asserted again after the upgrade (section I): a value
+;; that survives is one the upgrade did not touch.
+(begin-tx)
+(expect "PRE-1 old contract: both games drawn, retired, nothing pending — the state mainnet reads today"
+  [ { "active": false, "pending": 0.0, "bound": 0.0, "seed-bucket": 0.0, "owed": 0.0, "rounds-done": 1 }
+    { "active": false, "pending": 0.0, "bound": 0.0, "seed-bucket": 0.0, "owed": 0.0, "rounds-done": 1 } ]
+  (map (lambda (id:string)
+         (let ((g (smartpacts.prize-draw.get-raffle id)))
+           { "active": (at 'active g), "pending": (at 'pending g), "bound": (at 'bound g)
+           , "seed-bucket": (at 'seed-bucket g), "owed": (at 'owed g), "rounds-done": (at 'rounds-done g) }))
+       ["pilot-1" "grand-opening"]))
+(expect "PRE-2 old contract: each round holds a BLOCK HEIGHT in both decide fields"
+  [ { "state": "drawn", "decide-height": 202, "deciding-block": 202 }
+    { "state": "drawn", "decide-height": 302, "deciding-block": 302 } ]
+  (map (lambda (id:string)
+         (let ((r (smartpacts.prize-draw.get-round id 1)))
+           { "state": (at 'state r), "decide-height": (at 'decide-height r)
+           , "deciding-block": (at 'deciding-block r) }))
+       ["pilot-1" "grand-opening"]))
+(expect "PRE-3 old contract: both pools are empty"
+  [0.0 0.0]
+  (map (lambda (id:string) (coin.get-balance (smartpacts.prize-draw.pool-account id)))
+       ["pilot-1" "grand-opening"]))
+(commit-tx)
+
+;; The full rows, captured through a REPL-only snapshot table so section I can
+;; compare EVERY field, including ones no assertion names.
+(begin-tx)
+(module snap G
+  (defcap G () (enforce false "a test fixture is never upgraded"))
+  (defschema row v:object)
+  (deftable rows:{row})
+  (defun put:string (k:string v:object) (write rows k { "v": v }))
+  (defun got:object (k:string) (at 'v (read rows k))))
+(create-table rows)
+(commit-tx)
+(begin-tx)
+(snap.put "raffle|pilot-1"        (smartpacts.prize-draw.get-raffle "pilot-1"))
+(snap.put "raffle|grand-opening"  (smartpacts.prize-draw.get-raffle "grand-opening"))
+(snap.put "round|pilot-1"         (smartpacts.prize-draw.get-round "pilot-1" 1))
+(snap.put "round|grand-opening"   (smartpacts.prize-draw.get-round "grand-opening" 1))
+(snap.put "ticket|go|0"           (smartpacts.prize-draw.get-ticket "grand-opening" 1 0))
+(snap.put "ticket|go|14"          (smartpacts.prize-draw.get-ticket "grand-opening" 1 14))
+(snap.put "holding|go|b"          (smartpacts.prize-draw.get-holding "grand-opening" 1 "k:b0b0000000000000000000000000000000000000000000000000000000000002"))
+(snap.put "pool|grand-opening"    (smartpacts.prize-draw.pool-status "grand-opening"))
+(commit-tx)
+
+;; ===========================================================================
+;; THE UPGRADE — the same transaction shape mainnet will run: the new source,
+;; `init` false, signed by the admin keyset.
+;; ===========================================================================
+(env-chain-data { "block-height": 400, "block-time": (time "2026-09-28T08:00:00Z") })
+(env-data { "ns": "smartpacts", "init": false })
+;; The upgrade's authority, tested at its two gates directly. A failed `load`
+;; inside expect-failure breaks every later name in a REPL file, so the refusal is
+;; asserted on the gate the source runs first — (enforce-guard <ns>.prize-draw-admin)
+;; — and on the module's GOVERNANCE, which Pact checks to redefine a module.
+(env-sigs [])
+(begin-tx)
+(expect-failure "UPG-1 with no signature the load-time admin gate refuses the new source"
+  "Keyset failure"
+  (enforce-guard (keyset-ref-guard "smartpacts.prize-draw-admin")))
+(expect-failure "UPG-1b and module governance refuses too"
+  "Keyset failure"
+  (acquire-module-admin smartpacts.prize-draw))
+(rollback-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [] } ])
+(begin-tx)
+(expect-failure "UPG-2 the operator key cannot pass the admin gate"
+  "Keyset failure"
+  (enforce-guard (keyset-ref-guard "smartpacts.prize-draw-admin")))
+(expect-failure "UPG-2b nor module governance"
+  "Keyset failure"
+  (acquire-module-admin smartpacts.prize-draw))
+(rollback-tx)
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef", "caps": [] } ])
+(begin-tx)
+(load "../modules/prize-draw.pact")
+(commit-tx)
+(env-sigs [])
+(env-data {})
+;; the genuine-beacon fixture, loaded after the upgrade so it binds the new module
+(begin-tx)
+(load "fixtures/beacons.repl")
+(commit-tx)
+
+(begin-tx)
+(expect "UPG-3 the upgraded module is the drand version: its beacon helper exists and pins 180 s after a draw instant"
+  (n_48867b242317a0216a67f8c7ca26696b5878e0e3.drand.round-at (time "2026-09-20T17:43:00Z"))
+  (smartpacts.prize-draw.drand-round-for (time "2026-09-20T17:40:00Z")))
+(commit-tx)
+
+;; ===========================================================================
+;; I. Every row the old contract wrote reads back unchanged.
+;; ===========================================================================
+(begin-tx)
+(expect "OLD-1 pilot-1's raffle row is unchanged, every field"
+  (snap.got "raffle|pilot-1") (smartpacts.prize-draw.get-raffle "pilot-1"))
+(expect "OLD-2 grand-opening's raffle row is unchanged, every field"
+  (snap.got "raffle|grand-opening") (smartpacts.prize-draw.get-raffle "grand-opening"))
+(expect "OLD-3 pilot-1's round row is unchanged, every field — its winner, seed and block height stand"
+  (snap.got "round|pilot-1") (smartpacts.prize-draw.get-round "pilot-1" 1))
+(expect "OLD-4 grand-opening's round row is unchanged, every field"
+  (snap.got "round|grand-opening") (smartpacts.prize-draw.get-round "grand-opening" 1))
+(expect "OLD-5 tickets and holdings are unchanged"
+  [ (snap.got "ticket|go|0") (snap.got "ticket|go|14") (snap.got "holding|go|b") ]
+  [ (smartpacts.prize-draw.get-ticket "grand-opening" 1 0)
+    (smartpacts.prize-draw.get-ticket "grand-opening" 1 14)
+    (smartpacts.prize-draw.get-holding "grand-opening" 1 "k:b0b0000000000000000000000000000000000000000000000000000000000002") ])
+(expect "OLD-6 pool status is unchanged and still ok — pool addresses did not move"
+  (snap.got "pool|grand-opening") (smartpacts.prize-draw.pool-status "grand-opening"))
+(expect "OLD-7 the old rounds still carry BLOCK HEIGHTS in both decide fields (the documented field reuse)"
+  [ { "state": "drawn", "decide-height": 202, "deciding-block": 202 }
+    { "state": "drawn", "decide-height": 302, "deciding-block": 302 } ]
+  (map (lambda (id:string)
+         (let ((r (smartpacts.prize-draw.get-round id 1)))
+           { "state": (at 'state r), "decide-height": (at 'decide-height r)
+           , "deciding-block": (at 'deciding-block r) }))
+       ["pilot-1" "grand-opening"]))
+(expect "OLD-8 the raffle list and the fee destination are unchanged"
+  { "ids": ["grand-opening" "pilot-1"], "revenue": "draw-revenue" }
+  { "ids": (sort (smartpacts.prize-draw.list-raffles)), "revenue": (smartpacts.prize-draw.get-revenue) })
+(commit-tx)
+
+;; ===========================================================================
+;; II. A settled old round can never be settled again.
+;; ===========================================================================
+(begin-tx)
+(expect-failure "OLD-9 an old drawn round cannot be drawn again, whatever beacon is offered"
+  "this round is already settled"
+  (smartpacts.prize-draw.draw "grand-opening" 1 "k:d0000000000000000000000000000000000000000000000000000000000000d1"
+    (beacons.sig 20802058)))
+(expect-failure "OLD-10 an old drawn round cannot escape"
+  "this round is settled"
+  (smartpacts.prize-draw.escape "grand-opening" 1))
+(expect-failure "OLD-11 an old drawn round has nothing to claim"
+  "this round did not escape"
+  (smartpacts.prize-draw.claim-escape "grand-opening" 1 "k:b0b0000000000000000000000000000000000000000000000000000000000002"))
+(expect-failure "OLD-12 draw-status refuses a settled round and points to get-round"
+  "this round is settled — read get-round for its result"
+  (smartpacts.prize-draw.draw-status "pilot-1" 1))
+(expect "OLD-13 decidable is false for an old drawn round" false
+  (smartpacts.prize-draw.decidable "pilot-1" 1))
+;; review C-1: an old round stores a BLOCK HEIGHT (302 here) that is also a real past
+;; drand round, so drand's genuine beacon for it verifies. Without the refusal,
+;; preview would name winners the round never had.
+(expect "PREVIEW-OLD-a drand's genuine beacon for the block height grand-opening stores DOES verify"
+  true
+  (> (smartpacts.prize-draw.round-seed "grand-opening|1" 302 (beacons.sig 302)) -1))
+(expect-failure "PREVIEW-OLD preview refuses the old drawn round even with that genuine beacon"
+  "this round is settled — read get-round for its result"
+  (smartpacts.prize-draw.preview "grand-opening" 1 (beacons.sig 302)))
+(commit-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [] } ])
+(begin-tx)
+(expect-failure "OLD-14 a retired old raffle opens no new round after the upgrade"
+  "this raffle is retired — no new rounds open"
+  (smartpacts.prize-draw.schedule-round "pilot-1" (time "2026-09-28T09:00:00Z") (time "2026-09-28T10:00:00Z") (time "2026-09-28T10:00:00Z")))
+(commit-tx)
+(env-sigs [])
+
+;; ===========================================================================
+;; III. A new game on the upgraded contract: sells, pins, draws from drand,
+;; conserves. Clocks are in the past so drand's genuine beacon exists.
+;; ===========================================================================
+(env-chain-data { "block-height": 410, "block-time": (time "2026-09-20T17:00:00Z") })
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [] } ])
+(begin-tx)
+(smartpacts.prize-draw.create-raffle "after" 1.0 0.05 [0.5 0.5] 0 false 0.0 0 100.0 0.5 [1 1])
+(smartpacts.prize-draw.schedule-round "after" (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z"))
+(commit-tx)
+(env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" "m:smartpacts.prize-draw:after" 3.0) ] } ])
+(env-chain-data { "block-height": 420, "block-time": (time "2026-09-20T17:15:00Z") })
+(begin-tx)
+(smartpacts.prize-draw.buy "after" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 3 [])
+(expect "NEW-1 a round opened after the upgrade pins a DRAND ROUND in decide-height"
+  { "decide-height": (smartpacts.prize-draw.drand-round-for (time "2026-09-20T17:40:00Z")), "deciding-block": -1 }
+  (let ((r (smartpacts.prize-draw.get-round "after" 1)))
+    { "decide-height": (at 'decide-height r), "deciding-block": (at 'deciding-block r) }))
+(commit-tx)
+(env-sigs [])
+(env-chain-data { "block-height": 430, "block-time": (time "2026-09-20T17:45:00Z") })
+(begin-tx)
+(let* ((sig (beacons.sig-for "after" 1))
+       (p   (smartpacts.prize-draw.preview "after" 1 sig))
+       (d0  (coin.get-balance "k:d0000000000000000000000000000000000000000000000000000000000000d1"))
+       (r0  (coin.get-balance "draw-revenue"))
+       (out (smartpacts.prize-draw.draw "after" 1 "k:d0000000000000000000000000000000000000000000000000000000000000d1" sig))
+       (r   (smartpacts.prize-draw.get-round "after" 1)))
+  (expect "NEW-2 the draw settles exactly as previewed, from the pinned beacon"
+    { "ranks": (at 'ranks p), "amounts": (at 'amounts p), "seed": (at 'draw-seed p), "state": "drawn"
+    , "deciding-block": (at 'decide-height r) }
+    { "ranks": (at 'ranks r), "amounts": (at 'amounts r), "seed": (at 'draw-seed r), "state": (at 'state r)
+    , "deciding-block": (at 'deciding-block r) })
+  ;; sales 3.0, fee 0.15, crank share half the fee to the drawer, the rest revenue
+  (expect "NEW-3 the drawer takes the whole crank share and revenue the rest of the fee"
+    { "drawer": 0.075, "revenue": 0.075 }
+    { "drawer": (- (coin.get-balance "k:d0000000000000000000000000000000000000000000000000000000000000d1") d0)
+    , "revenue": (- (coin.get-balance "draw-revenue") r0) })
+  (expect "NEW-4 the pool is empty and conservation holds" { "balance": 0.0, "ok": true }
+    (let ((s (smartpacts.prize-draw.pool-status "after")))
+      { "balance": (at 'balance s), "ok": (at 'ok s) })))
+(commit-tx)
+
+;; ===========================================================================
+;; V. THE HAZARD, and the precondition that refuses it. A round the OLD contract
+;; opened carries no drand round:
+;;   - draw never opened: decide-height 0 — after the upgrade it can neither draw nor
+;;     escape (HAZARD-1..3);
+;;   - draw opened: decide-height is a BLOCK HEIGHT, which the new code reads as a
+;;     drand round from 2025 — its beacon is public and its 90 days are long over, so
+;;     the round escapes AT ONCE, and a buyer who can see they lost can take it (HAZARD-4).
+;; So the upgrade transaction's FIRST form is ops/mainnet-deploy/upgrade-precondition.pact,
+;; loaded here VERBATIM. It names the mainnet module fully, so this section deploys a
+;; fresh copy of the old contract under the mainnet namespace. PRE-OK proves it passes
+;; on mainnet's state today; HAZARD-5, the file's last form, proves it refuses this one.
+;; ===========================================================================
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef", "caps": [] } ])
+(env-data { "admin": ["476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"] })
+(env-chain-data { "block-height": 500, "block-time": (time "2026-09-21T00:00:00Z") })
+(begin-tx)
+(namespace "n_48867b242317a0216a67f8c7ca26696b5878e0e3")
+(define-keyset "n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw-admin"    (read-keyset "admin"))
+(define-keyset "n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw-operator" (read-keyset "admin"))
+(commit-tx)
+(env-data { "ns": "n_48867b242317a0216a67f8c7ca26696b5878e0e3", "init": true })
+(begin-tx)
+(load "fixtures/prize-draw-v1-mainnet.pact")
+(commit-tx)
+(env-data {})
+(begin-tx)
+(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.initialize "draw-revenue")
+;; mainnet's shape today: every raffle retired, nothing pending, nothing bound
+(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.create-raffle "done" 1.0 0.05 [1.0] 0 false 0.0 0 100.0 0.5 [1 1])
+(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.retire-raffle "done")
+(commit-tx)
+(begin-tx)
+(load "../../ops/mainnet-deploy/upgrade-precondition.pact")
+(expect "PRE-OK the in-transaction precondition passes on mainnet's shape: every raffle retired, nothing pending or bound"
+  true true)
+(commit-tx)
+
+;; now the hazard: one round sold with its draw never opened, one sold and opened
+(begin-tx)
+(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.create-raffle "live" 1.0 0.05 [1.0] 0 false 0.0 0 100.0 0.5 [1 1])
+(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.schedule-round "live" (time "2026-09-21T00:10:00Z") (time "2026-09-21T01:00:00Z") (time "2026-09-21T01:00:00Z"))
+(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.create-raffle "opened" 1.0 0.05 [1.0] 0 false 0.0 0 100.0 0.5 [1 1])
+(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.schedule-round "opened" (time "2026-09-21T00:10:00Z") (time "2026-09-21T01:00:00Z") (time "2026-09-21T01:00:00Z"))
+(commit-tx)
+(env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" "m:n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw:live" 2.0)
+                      , (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" "m:n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw:opened" 2.0) ] } ])
+(env-chain-data { "block-height": 510, "block-time": (time "2026-09-21T00:20:00Z") })
+(begin-tx)
+(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.buy "live" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [])
+(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.buy "opened" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [])
+(commit-tx)
+(env-sigs [])
+;; the old contract opens "opened"'s draw at a mainnet-sized height
+(env-chain-data { "block-height": 7269301, "block-time": (time "2026-09-21T01:05:00Z") })
+(begin-tx)
+(n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.open-draw "opened" 1)
+(commit-tx)
+
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef", "caps": [] } ])
+(env-data { "ns": "n_48867b242317a0216a67f8c7ca26696b5878e0e3", "init": false })
+(begin-tx)
+(load "../modules/prize-draw.pact")
+(commit-tx)
+(env-sigs [])
+(env-data {})
+(env-chain-data { "block-height": 7269400, "block-time": (time "2026-09-21T02:00:00Z") })
+(begin-tx)
+(expect "HAZARD-1 the never-opened round is still selling with decide-height 0"
+  { "state": "selling", "decide-height": 0 }
+  (let ((r (n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.get-round "live" 1)))
+    { "state": (at 'state r), "decide-height": (at 'decide-height r) }))
+(expect-failure "HAZARD-2 it cannot be drawn — the verifier refuses drand round 0"
+  "drand round out of range"
+  (n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.preview "live" 1 (beacons.sig 20802058)))
+(expect-failure "HAZARD-3 and it cannot escape, even months later"
+  "drand rounds start at 1"
+  (n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.escape "live" 1))
+(expect "HAZARD-4 the OPENED round escapes AT ONCE, one hour after its draw instant: its block height reads as a long-past drand round"
+  "opened round 1 escaped: nobody drew it"
+  (n_48867b242317a0216a67f8c7ca26696b5878e0e3.prize-draw.escape "opened" 1))
+(rollback-tx)
+
+;; LAST FORM: a failed `load` inside expect-failure breaks every later name in a REPL file.
+(begin-tx)
+(expect-failure "HAZARD-5 the in-transaction precondition refuses this state, so the upgrade transaction would abort as a whole"
+  "upgrade precondition: live has a round waiting for its draw"
+  (load "../../ops/mainnet-deploy/upgrade-precondition.pact"))

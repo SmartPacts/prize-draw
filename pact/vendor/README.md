@@ -1,13 +1,16 @@
 # Vendored snapshots — copies, never hand-edited
 
-The contract depends on two things this folder holds copies of, so the REPL suite can run on its
-own: our **block record** (`block-history`, the public record of block hashes the draw reads) and
-Kadena's **coin** contract and **fungible** interfaces. **Editing a copy here changes nothing on
-chain and silently forks the tests from the real code.**
+The contract depends on things this folder holds copies of, so the REPL suite can run on its own:
+the **drand beacon verifier** (`drand.pact`, a copy of the sealed module on chain that the draw
+verifies its beacon with), Kadena's **coin** contract and **fungible** interfaces, and the
+**block record** (`block-history`) that the PREVIOUS version read — kept only because the upgrade
+suite replays that version. **Editing a copy here changes nothing on chain and silently forks the
+tests from the real code.**
 
 | File | Snapshot of | Source | Commit | Taken |
 |---|---|---|---|---|
-| `block-history.pact` | the immutable per-chain block record (`pact/modules/block-history.pact`) — v2.0.0, attested-only, deployed on all 20 mainnet chains in `free` on 2026-09-11, hash `P3J_LK-Wivmuyw7SB7TzPmfj6t-GCtG3YnfHNAaU2UU` | github.com/SmartPacts/block-history (public) | `9fd87de1ee1d4fef7ecd4c1eb3a79aaf759c2421` | 2026-09-11 |
+| `drand.pact` | the sealed drand evmnet beacon verifier: deployed on mainnet chain 2 as `n_48867b242317a0216a67f8c7ca26696b5878e0e3.drand`, hash `Y07t-duJmkXkcGth0TfBRg3ThbNR-uh9PdNUd1MKHBQ`, pinned by the module's `use`; it depends on nothing, so the REPL computes the same hash for this file | our casino contracts (not public) | `7c8e285a972f92989c232e975be57af208556398` | 2026-09-28 |
+| `block-history.pact` | no longer read by the contract; the immutable per-chain block record (`pact/modules/block-history.pact`) — v2.0.0, attested-only, deployed on all 20 mainnet chains in `free` on 2026-09-11, hash `P3J_LK-Wivmuyw7SB7TzPmfj6t-GCtG3YnfHNAaU2UU` | github.com/SmartPacts/block-history (public) | `9fd87de1ee1d4fef7ecd4c1eb3a79aaf759c2421` | 2026-09-11 |
 | `fixtures/coin.pact` | Kadena `coin` v6 test fixture | our private test tree (not public) | `64ec832f9b69c62032327ef644cdbb01c59036e2` | 2026-09-07 |
 | `fixtures/fungible-v2.pact` | Kadena `fungible-v2` interface | our private test tree (not public) | `64ec832f9b69c62032327ef644cdbb01c59036e2` | 2026-09-07 |
 | `fixtures/fungible-xchain-v1.pact` | Kadena `fungible-xchain-v1` interface | our private test tree (not public) | `64ec832f9b69c62032327ef644cdbb01c59036e2` | 2026-09-07 |

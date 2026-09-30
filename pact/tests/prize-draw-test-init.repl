@@ -1,18 +1,20 @@
 ;; prize-draw-test-init.repl — self-contained environment for the prize-draw
-;; suites: a namespace, the coin stack, the keysets, the block record the draw
-;; reads from, the revenue account, and the module.
+;; suites: a namespace, the coin stack, the keysets, the drand verifier the draw
+;; checks its beacon with, the revenue account, and the module.
 ;;
 ;; The module reads its namespace from transaction data at load, so ONE source
 ;; deploys unchanged into a devnet namespace and a mainnet principal one; the
-;; suites use "smartpacts". block-history is DIFFERENT: it lives in `free` on
-;; mainnet and the module names it `free.block-history`, pinned to its code hash, so
-;; the fixture loads it into `free` exactly as mainnet has it.
+;; suites use "smartpacts". The drand verifier is DIFFERENT: the module names it
+;; `n_48867b242317a0216a67f8c7ca26696b5878e0e3.drand`, pinned to its code hash, so
+;; the fixture loads it under exactly that name, as mainnet has it.
 ;;
-;; Block simulation. (env-chain-data …) MERGES into the previous public data.
-;; block-history's `attest` writes {height-1 -> prev-block-hash} and records the
-;; SENDER as the attester, and the module's `draw` pays that attester a bounty — so a
-;; suite that attests a deciding block must set block-height, prev-block-hash
-;; AND sender together, or it settles against a state no chain can produce.
+;; Beacons. A round is pinned to the drand round published DRAND-MARGIN-SECONDS
+;; after its draw instant, and only drand's genuine signature for that round
+;; verifies. The suites therefore draw with REAL evmnet signatures, fetched once
+;; and kept in `fixtures/beacons.repl` (the `beacons` module); `(beacons.sig-for
+;; id seq)` returns the one for a round's pinned drand round and aborts, naming
+;; the round, when it is missing. Scenario clocks are therefore in the PAST:
+;; a beacon for a future round does not exist yet.
 
 ;; ---- namespaces --------------------------------------------------------------
 (env-data { "ns-admin": ["476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"] })
@@ -38,8 +40,8 @@
 ;; ---- keysets ----------------------------------------------------------------
 ;; admin (GOVERNANCE) and operator are DIFFERENT keys on purpose: every test that
 ;; proves the operator cannot upgrade, and that governance is a separate trust
-;; boundary, depends on it. block-history needs no keyset at all: the deployed
-;; v2.0.0 is attested-only and immutable, with no backfill and no governance.
+;; boundary, depends on it. The drand verifier needs no keyset at all: it is
+;; sealed, with no governance that can ever pass.
 (env-data
   { "admin":       ["476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"]
   , "operator":    ["09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"] })
@@ -49,17 +51,17 @@
 (define-keyset "smartpacts.prize-draw-operator"         (read-keyset "operator"))
 (commit-tx)
 
-;; ---- free.block-history — the DEPLOYED v2.0.0 source, vendored verbatim --------
-;; Loaded into `free`, exactly as on mainnet, because the module names it
-;; `free.block-history` and PINS its code hash. Loaded under any other name, the
-;; hash differs and the module refuses to load — and that refusal is itself pinned.
-;; Deployed at height 100: the deploy transaction itself sees block 99 as previous.
-(env-data { "ns": "free" })
-(env-chain-data { "chain-id": "1", "block-height": 100, "prev-block-hash": "H99"
-                , "block-time": (add-time (time "1970-01-01T00:00:00Z") 99), "sender": "deployer" })
+;; ---- the drand verifier — the DEPLOYED sealed source, vendored verbatim -------
+;; Loaded under its mainnet name because the module names it fully and PINS its
+;; code hash; the verifier is dependency-free, so the REPL computes mainnet's hash
+;; for it. Loaded under any other name or bytes, the module refuses to load — and
+;; that refusal is itself pinned.
 (begin-tx)
-(load "../vendor/block-history.pact")
+(define-namespace "n_48867b242317a0216a67f8c7ca26696b5878e0e3" test-ns.NS-GUARD test-ns.NS-GUARD)
+(load "../vendor/drand.pact")
 (commit-tx)
+(env-chain-data { "chain-id": "1", "block-height": 100, "sender": "deployer"
+                , "block-time": (time "2026-01-01T00:00:00Z") })
 
 ;; ---- the revenue account -----------------------------------------------------
 ;; prize-draw does NOT import a module for this: the destination is recorded at
@@ -71,7 +73,7 @@
 
 ;; ---- two more funded personas -------------------------------------------------
 ;; Funded far beyond anything a suite stakes. They exist so a suite has accounts
-;; beyond the players it funds itself — a second buyer, a crank payee, a recorder.
+;; beyond the players it funds itself — a second buyer, a crank payee.
 (env-data
   { "seal-ks":  { "keys": ["5ea1000000000000000000000000000000000000000000000000000000000001"], "pred": "keys-all" }
   , "seal2-ks": { "keys": ["5ea1000000000000000000000000000000000000000000000000000000000002"], "pred": "keys-all" } })
@@ -91,5 +93,10 @@
 (commit-tx)
 (env-sigs [])
 (env-data {})
+
+;; ---- genuine drand evmnet beacons for the scenarios' pinned rounds ----------
+(begin-tx)
+(load "fixtures/beacons.repl")
+(commit-tx)
 
 (print "prize-draw test environment ready")

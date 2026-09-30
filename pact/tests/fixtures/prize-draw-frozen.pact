@@ -17,47 +17,53 @@
 ;; entire fund is always paid out. Winners are paid INSIDE the draw transaction —
 ;; there is nothing to claim, ever.
 ;;
-;; A ROUND RUNS BY THE CALENDAR, AND THE BLOCK ALONE DECIDES IT. The operator
+;; A ROUND RUNS BY THE CALENDAR, AND A DRAND BEACON DECIDES IT. The operator
 ;; schedules three instants for the next round — sales open, sales close, draw —
-;; and the round's FIRST TICKET freezes them with every other term. Sales are
-;; enforced by the chain's clock. At or after the draw instant, anyone opens the
-;; draw, which fixes the candidate blocks as the next ones on the chain; until
-;; then nothing exists that could decide the round, so nobody, the house
-;; included, can know the winner before the advertised moment. The candidates
-;; are read from block-history — an immutable, money-free, raffle-blind record
-;; whose `attest` takes no arguments, so a recorder chooses neither the key
-;; (block-height - 1) nor the value (prev-block-hash) and can only publish or
-;; stay silent. The draw is then a pure function of the round key and the
-;; deciding block's hash. There are no secrets, no bonds and nobody to wait for.
+;; and the round's FIRST TICKET freezes them with every other term, and pins the
+;; round to ONE drand beacon: the last one drand publishes within
+;; DRAND-MARGIN-SECONDS of the draw instant (177 to 180 s after it). Sales are
+;; enforced by the chain's clock, and the beacon does not exist until after the
+;; last ticket could have been sold, so nobody — player, miner or house — can
+;; know the winner while a ticket can still be bought. Once drand publishes it,
+;; anyone submits the beacon with `draw`; it is verified on chain against drand's
+;; pinned public key, so a forged one aborts. The draw is a pure function of the
+;; round key and that beacon. There are no secrets, no bonds, no recorders and
+;; nobody to wait for.
+;;
+;; WHY NOT A BLOCK HASH. The miner of a deciding block sees its hash before
+;; publishing and can throw the block away and mine again; the party that records
+;; a block can decline to. Both tilted every block-decided round. A drand value is
+;; a threshold BLS signature: exactly one valid signature exists per round, so
+;; nobody can choose it, and it is produced by no Kadena miner. drand can only
+;; STOP publishing — it cannot steer a result.
 ;;
 ;; NOTHING RE-ROLLS. A draw whose seed depends on a value some caller can mint
-;; again — a fresh attempt key, a second capture — is not a draw: the same block
-;; hash then yields a different winner on every try, and whoever can decline to
-;; act chooses the winner for the price of gas. There is no attempt and no retry
-;; here. The bounded window of DECIDE-WINDOW candidate heights cannot re-roll
-;; either: the decider is the LOWEST RECORDED one, final the moment it exists.
-;;
-;; 🔴 WHAT CAN STILL TILT A DRAW, DISCLOSED (founder decision, ADR-C19). Nobody
-;; can choose a winner. Three parties can buy themselves a slightly better chance:
-;; - a party recording blocks ALONE sees each candidate's outcome as it is mined
-;;   and can decline to record one it dislikes and take the next — the best of
-;;   three, or a refund of the whole round by recording none — and only while no
-;;   independent recorder attests (two record on mainnet today);
-;; - a miner holding tickets can discard a candidate block it mined whose hash
-;;   loses, paying the block reward for one more roll;
-;; - the miner of the block AFTER a candidate can leave every attest of it out of
-;;   that block for nothing, so the next candidate decides instead — the one
-;;   channel an independent recorder does NOT remove, since every recorder's
-;;   attest for a height goes through that same block.
-;; Each is bounded to the three candidates plus a refund; none selects. The
-;; player terms must say all three.
+;; again — a fresh attempt key, a second capture — is not a draw: the same beacon
+;; then yields a different winner on every try, and whoever can decline to act
+;; chooses the winner for the price of gas. There is no attempt and no retry
+;; here, and no second source: the round, its pinned beacon round and the unique
+;; signature for it are all fixed before anyone can know the outcome.
 ;;
 ;; THE ESCAPE is the last resort and still cannot steer a winner. A round escapes
-;; when nobody opened its draw within a day of its draw instant, or when NO
-;; candidate in its window was recorded — permanent once the last candidate's one
-;; recording block has passed, and immediate from then. It returns each buyer
-;; exactly their own stake plus their share of the bonus, selects no winner, and
-;; takes no fee.
+;; only when nobody drew it for ESCAPE-AFTER-SECONDS after its beacon was due — the
+;; condition under which drand has stopped or the game was abandoned. It returns
+;; each buyer exactly their own stake plus their share of the bonus, selects no
+;; winner, and takes no fee. 🔴 DISCLOSED: a beacon is public the moment drand
+;; publishes it, so after the escape opens a buyer who can see they lost could
+;; escape rather than draw. Opening only after ninety days is what makes that
+;; require the house AND every winner to ignore a round for a quarter, when any
+;; one of them can draw it alone at any time.
+;;
+;; 🔴 THIS VERSION REPLACED A BLOCK-DECIDED ONE IN PLACE, and the tables carry
+;; that history. Rounds drawn before it hold a BLOCK HEIGHT in `decide-height` and
+;; `deciding-block`; rounds opened after it hold a DRAND ROUND there (see the
+;; round schema). No schema changed, because a field added to a live table loads
+;; clean and aborts at its first access. The upgrade is sound only while NO round
+;; the old code opened is unsettled: with decide-height 0 (draw never opened) it
+;; could neither draw nor escape; with a block height (draw opened) this code reads
+;; a long-past drand round, so it could escape at once, taken by a buyer who can
+;; see they lost. The upgrade transaction's FIRST form refuses both
+;; (ops/mainnet-deploy/upgrade-precondition.pact).
 ;;
 ;; FEES ARE MODULAR. The fee is per raffle, re-settable for
 ;; FUTURE rounds, and frozen into each round at open so it can never reach money
@@ -107,9 +113,9 @@
 ; Load-time admin gate: deploying or upgrading this file requires the casino admin.
 (enforce-guard (keyset-ref-guard (format "{}.prize-draw-admin" [(read-msg 'ns)])))
 
-; The winner is decided by the LOWEST RECORDED of DECIDE-WINDOW candidate blocks
-; fixed at the round's draw instant. A round refunds only if no candidate is
-; ever recorded or nobody opened its draw. Each raffle has its own isolated pool.
+; The winner is decided by the drand beacon pinned at the round's first ticket.
+; A round refunds only if nobody draws it within ESCAPE-AFTER-SECONDS of that
+; beacon. Each raffle has its own isolated pool.
 (module prize-draw GOVERNANCE
 
   @doc "Prize Draw raffles. Many raffles as config rows on one always-a-winner state \
@@ -117,25 +123,18 @@
   \k = min(tiers, tickets) winners inside the draw transaction."
 
   (use coin)
-  ;; There is no randomness engine, and one would add no entropy here: this
-  ;; module would be its sole committer and the committed value is public by
-  ;; design, while its per-attempt round key is exactly the variable that makes a
-  ;; draw re-rollable, and its `finalize` would sit in a module governed by a
-  ;; DIFFERENT keyset — still upgradeable after this one freezes. What decides a
-  ;; round instead is ONE named future block, written down by a module that can
-  ;; never be upgraded. block-history is that record: immutable, attested-only,
-  ;; and deployed in namespace `free` on every mainnet chain. It is named FULLY
-  ;; and PINNED to its code hash. Unqualified, `use` resolves in THIS module's
-  ;; namespace and fails anywhere but `free`, with "Cannot find module:
-  ;; <ns>.block-history". The pin makes this module refuse to load against any
-  ;; code but the genuine one: a wrong hash fails with "hash not blessed". The
-  ;; REPL computes the same hash for free.block-history as mainnet does, so ONE
-  ;; source pins correctly on every network where it is deployed in `free`. A
-  ;; hash cannot tell a same-code copy whose deploy transaction planted rows from
-  ;; a clean one; the pin leans on the deployed instances having been verified
-  ;; clean.
-  (use free.block-history "P3J_LK-Wivmuyw7SB7TzPmfj6t-GCtG3YnfHNAaU2UU"
-    [ hash-of has-attested get-attested ])
+  ;; What decides a round is ONE drand beacon, verified by a module that can never
+  ;; be upgraded: `drand` is sealed (its governance is `enforce false`), holds no
+  ;; tables, no capabilities and no funds, and pins drand's evmnet public key. It
+  ;; is named FULLY and PINNED to its code hash, so this module refuses to load
+  ;; against any other bytes under that name — a verifier that accepted a chosen
+  ;; signature would choose the winner — and a wrong hash fails with "hash not
+  ;; blessed". The module is dependency-free, so the REPL computes the same hash
+  ;; for it as mainnet does and ONE source pins correctly everywhere it is
+  ;; deployed under that name. `verified-seed` ABORTS unless the signature
+  ;; verifies, so no caller can proceed on an unchecked beacon.
+  (use n_48867b242317a0216a67f8c7ca26696b5878e0e3.drand "Y07t-duJmkXkcGth0TfBRg3ThbNR-uh9PdNUd1MKHBQ"
+    [ verified-seed round-at time-of-round ])
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; CONSTANTS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -158,12 +157,33 @@
   (defconst MAX-SALES-SECONDS:decimal 31536000.0)     ; 365 days: the house sets the window
   (defconst MAX-DRAW-GAP-SECONDS:decimal 604800.0)    ; 7 days: stakes wait until the draw
   (defconst MAX-LEAD-SECONDS:decimal 31536000.0)      ; a round may be scheduled a year ahead
-  ; If nobody opens the draw within this of the draw instant, the round can be
-  ; escaped: every stake goes back and no fee is taken. The crank opens it at
-  ; the draw instant; this grace exists so a round whose draw nobody ever opened
-  ; is not stuck. From the grace on, opening and escaping both stay possible
-  ; until one of them lands — the house's cost of a dead crank.
-  (defconst OPEN-DRAW-GRACE-SECONDS:decimal 86400.0)
+  ; 🔴 THE WAIT BETWEEN THE DRAW INSTANT AND THE BEACON, AND WHY IT IS
+  ; LOAD-BEARING. The chain's clock is the PARENT block's time, so a ticket is
+  ; accepted while the parent's time is before closes-at and can still be mined a
+  ; whole block interval later in real time. If the pinned beacon were published
+  ; inside that gap, anyone watching drand could read the outcome and THEN buy.
+  ; The draw instant is never before the close, and the beacon comes this long
+  ; after the draw instant. MEASURED for the casino (roulette.pact, the same
+  ; chain): over 120,001 consecutive chain-2 blocks the longest gap was 136.2 s
+  ; and none passed 150 s; 180 s is the same wait roulette launched with. drand
+  ; publishes every 3 s and the pinned round is the last one at or before the
+  ; margin, so the beacon comes 177 to 180 s after the draw instant. It is a
+  ; CONSTANT here, not a setting: a round pins its beacon at its first ticket and
+  ; a later change could never reach it anyway, and a constant needs no stored
+  ; field. A network halt longer than this — or a miner rewriting more than this
+  ; much of the chain from before the close, a deep reorg — exposes the one round
+  ; open at that moment: disclosed, not claimed away.
+  (defconst DRAND-MARGIN-SECONDS:decimal 180.0)
+  ; 🔴 HOW LONG EVERYONE MUST LEAVE A ROUND UNDRAWN BEFORE IT CAN ESCAPE. Ninety
+  ; days, and the length IS the safety argument. The module cannot tell "the
+  ; beacon is unobtainable" from "nobody fetched it" — drand beacons never expire
+  ; — and once a beacon is public a losing buyer can see they lost. So an escape
+  ; opens only when the house's crank AND every winner, each able to draw alone
+  ; and each able to see the beacon, have left the round for a quarter: the
+  ; condition under which drand has really stopped or the game was abandoned,
+  ; which is when a refund is the right answer. Until an escape lands, a draw
+  ; still settles the round normally. The same ninety days as roulette.
+  (defconst ESCAPE-AFTER-SECONDS:decimal 7776000.0)
   ; "Not scheduled." A raffle's next-round instants hold this until `schedule-round`.
   (defconst EPOCH:time (time "1970-01-01T00:00:00Z"))
 
@@ -174,8 +194,8 @@
   (defconst MAX-TICKETS-PER-TX:integer 50)
   (defconst MAX-SUPPLY:integer 1000000)
 
-  ; ABSOLUTE bound on what one round can hold — the miner-grind control (a
-  ; relative cap grows with the pot; this one does not).
+  ; ABSOLUTE bound on what one round can hold (a relative cap grows with the
+  ; pot; this one does not).
   ; The rail is deliberately WIDE: everything the house tunes has to stay tunable,
   ; so the loss limit lives in the per-raffle ceiling, which the operator changes
   ; at any time for FUTURE rounds while a round already selling keeps the ceiling
@@ -185,45 +205,11 @@
   ; by the operator and frozen into each round at open — the pot ceiling is meant
   ; to stay adjustable, and OPERATOR (not GOVERNANCE) gates it so it still is
   ; after the module freezes.
-  ;
-  ; 🔴 IT IS A DISCLOSED LOSS LIMIT, NOT A SAFETY BOUND. The miner of a candidate
-  ; block can throw it away for the price of one block reward, which on mainnet
-  ; is of the order of a single KDA, so no ceiling near that makes grinding
-  ; unprofitable. What a ceiling bounds is how much ONE round can lose to that,
-  ; not whether it can happen. Size it as a business risk.
+  ; It is a business limit on what ONE round can hold, sized as a business risk.
   (defconst MAX-ROUND-FUND:decimal 100000.0)
 
   ; Ceiling on a raffle's one-way bonus bucket. Same wide rail, same reasoning.
   (defconst MAX-SEED-CAP:decimal 100000.0)
-
-  ; The first candidate block is this many blocks after the block in which the
-  ; draw was opened, so it postdates that block; 2 is margin. The height is chosen
-  ; by whoever opens the draw and that confers no advantage: the hash of a block
-  ; that does not yet exist is unknown to everyone.
-  (defconst DECIDE-DELAY:integer 2)
-
-  ; The deciding block is the LOWEST RECORDED of decide-height and the
-  ; DECIDE-WINDOW - 1 heights after it. On mainnet a block goes unrecorded when
-  ; the next one arrives within ~15 s, because miners refresh the block they are
-  ; building only that often — no recorder can beat it. A second, independent
-  ; recorder narrows the gap and cannot close it: measured on mainnet, one
-  ; recorder narrows the gap and cannot close it. MEASURED on mainnet chain 2 over
-  ; 2,400 consecutive heights with TWO recorders running: 91.0 % of heights on
-  ; record. Pinned to a SINGLE height, 9.04 % of rounds would die unrecorded —
-  ; about one in eleven. Misses are ANTI-correlated: 213 lone misses, 2 adjacent
-  ; pairs, and not one run of three, so three candidates took the dead rate to
-  ; 0 of 2,398 windows.
-  ; The decider is final the moment it is recorded, because a height can be
-  ; recorded only in the very next block: once a higher candidate is on record,
-  ; every lower one's only chance has passed.
-  ; 🔴 A party recording ALONE sees each candidate's outcome as it is mined and
-  ; can decline to record one it dislikes and take the next, or none and take
-  ; the refund: a best of three plus a refund, at most. An independent recorder
-  ; removes that choice — whoever records first decides — and two record on
-  ; mainnet today. The miner of block h + 1 keeps a choice no recorder can take
-  ; away: it can leave every attest of h out of its block. Disclosed, never
-  ; denied.
-  (defconst DECIDE-WINDOW:integer 3)
 
   (defconst STATE-KEY:string "state")
 
@@ -269,17 +255,17 @@
   (defcap RAFFLE-SCHEDULED:bool (id:string opens-at:time closes-at:time draws-at:time) @event true)
   (defcap RAFFLE-SEEDED:bool   (id:string funder:string amount:decimal bucket:decimal) @event true)
   (defcap ROUND-OPENED:bool    (id:string seq:integer opens-at:time closes-at:time draws-at:time
-                                price:decimal rake:decimal seed-in:decimal) @event true)
+                                price:decimal rake:decimal seed-in:decimal
+                                drand-round:integer) @event true)
   (defcap TICKETS-BOUGHT:bool  (id:string seq:integer account:string count:integer
                                 from-rank:integer numbers:[integer]) @event true)
-  (defcap DRAW-OPENED:bool     (id:string seq:integer decide-height:integer) @event true)
-  (defcap DRAWN:bool           (id:string seq:integer draw-seed:integer deciding-block:integer
+  (defcap DRAWN:bool           (id:string seq:integer draw-seed:integer drand-round:integer
                                 tickets:integer ranks:[integer] amounts:[decimal]
                                 accounts:[string]) @event true)
   (defcap WINNER-PAID:bool     (id:string seq:integer account:string amount:decimal) @event true)
   (defcap FEE-PAID:bool        (id:string seq:integer fee:decimal bounties:decimal) @event true)
   (defcap BOUNTY-PAID:bool     (id:string seq:integer role:string account:string amount:decimal) @event true)
-  (defcap ESCAPED:bool         (id:string seq:integer decide-height:integer booked:decimal) @event true)
+  (defcap ESCAPED:bool         (id:string seq:integer drand-round:integer booked:decimal) @event true)
   (defcap ESCAPE-PAID:bool     (id:string seq:integer account:string amount:decimal) @event true)
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; SCHEMAS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -300,9 +286,14 @@
     max-fund:decimal            ; prize ceiling of FUTURE rounds, operator-set
     rounds-limit:integer        ; 0 = runs forever; else retires after N rounds,
                                 ; but never while a bonus waits or is live
-    ; What the two roles that END a round are paid, out of the FEE and never
-    ; the prize: `bounty-share` of the fee, divided by these weights, in the
-    ; order [recorder drawer]. Each round freezes both at open.
+    ; What whoever sends the draw is paid, out of the FEE and never the prize:
+    ; `bounty-share` of the fee. Each round freezes it at open.
+    ; `bounty-split` is RETAINED FROM THE BLOCK-DECIDED VERSION and no longer
+    ; read by any settlement: it divided the share between the block's recorder
+    ; and the drawer, and a drand round has no recorder. It stays because rows
+    ; written before this version hold it and a schema change on a live table
+    ; fails late. It is still validated (weights not all zero) so every row keeps
+    ; one shape.
     bounty-share:decimal
     bounty-split:[integer]
     ; The NEXT round's schedule, set by `schedule-round` and consumed by that
@@ -329,7 +320,7 @@
     seq:integer
     opens-at:time               ; frozen: sales open here (chain time)
     closes-at:time              ; frozen: sales close here
-    draws-at:time               ; frozen: the draw may be opened from here
+    draws-at:time               ; frozen: the beacon comes 177 to 180 s later
     price:decimal               ; frozen
     rake:decimal                ; frozen
     tiers:[decimal]             ; frozen
@@ -337,15 +328,20 @@
     max-tickets:integer         ; frozen
     max-fund:decimal            ; frozen prize ceiling of THIS round
     bounty-share:decimal        ; frozen
-    bounty-split:[integer]      ; frozen [recorder drawer]
+    bounty-split:[integer]      ; frozen, retained, unread (see the raffle schema)
     seed-in:decimal             ; bonus bound to THIS round at open
     sales:decimal
     tickets:integer             ; the draw's sample space [0, tickets)
-    decide-height:integer       ; the FIRST of DECIDE-WINDOW candidate heights.
-                                ; Written once, by `open-draw` at or after the draw
-                                ; instant, and read by nothing that can change it. 0 until then.
-    deciding-block:integer      ; the candidate that actually decided it, written
-                                ; at the draw; -1 until then
+    ; 🔴 TWO FIELDS KEEP THEIR BLOCK-ERA NAMES. A schema change on a live table
+    ; fails late (the upgrade loads clean and the first access of a new field
+    ; aborts), so the drand version reuses these instead of adding fields:
+    decide-height:integer       ; THE PINNED DRAND ROUND. Written once, at the
+                                ; round's first ticket, from its frozen draws-at,
+                                ; and read by nothing that can change it. Rounds
+                                ; drawn before this version hold a block height.
+    deciding-block:integer      ; the drand round that decided it, written at the
+                                ; draw; -1 until then. A block height on rounds
+                                ; drawn before this version.
     state:string                ; "selling" | "drawn" | "escaped"
     draw-seed:integer           ; -1 until drawn
     ranks:[integer]
@@ -378,7 +374,6 @@
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; HELPERS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   ;; All pure or read-only. None of them moves money.
 
-  (defun now:integer () (at 'block-height (chain-data)))
   ; The chain's clock: the PARENT block's timestamp, a consensus value that lags
   ; the wall clock by about one block and never runs backwards.
   (defun now-time:time () (at 'block-time (chain-data)))
@@ -430,51 +425,51 @@
       (format "the {} must not be a module account" [role]))
     account)
 
-  ; Both inputs are fixed before they are jointly knowable: the round key at the
-  ; round's first ticket, the block hash by mining, at a height fixed by
-  ; `open-draw` before the block existed.
-  (defun round-seed:integer (rk:string bhash:string)
-    @doc "This round's draw seed: a domain-separated hash of the round key and \
-    \the hash of the block that decided this round. Pure and public."
-    (mod (str-to-int 64 (hash (format "prize-draw|{}|{}" [rk bhash])))
-         DRAW-SEED-RANGE))
+  ; The beacon a round is pinned to: the drand round published DRAND-MARGIN-SECONDS
+  ; after its draw instant (`round-at` returns the round published at or before
+  ; the instant it is given, so at most one drand period earlier than that).
+  (defun drand-round-for:integer (draws-at:time)
+    @doc "The drand round that decides a round drawing at `draws-at`. Pure and \
+    \public: anyone can compute a round's beacon from its published schedule."
+    (round-at (add-time draws-at DRAND-MARGIN-SECONDS)))
 
-  ; Final the moment it is non-negative — and that finality is INHERITED, not
-  ; proved here. `free.block-history` writes {block-height - 1 -> prev-block-hash},
-  ; so a height can be recorded only in the block immediately after it; by the time
-  ; a higher candidate is on record, every lower one's single chance has already
-  ; passed. This module pins that record to its code hash (see the `use` above),
-  ; which is what makes the inherited property safe to rely on.
-  (defun decided-height:integer (dh:integer)
-    @doc "The height that decides a round whose window starts at `dh`: the LOWEST \
-    \RECORDED of dh .. dh + DECIDE-WINDOW - 1, or -1 while none of them is. \
-    \Read-only."
-    (fold (lambda (acc:integer h:integer)
-            (if (and (= acc -1) (has-attested h)) h acc))
-          -1
-          (enumerate dh (+ dh (- DECIDE-WINDOW 1)))))
+  ; Both inputs are fixed before they are jointly knowable: the round key and its
+  ; pinned drand round at the round's first ticket, the signature by drand after
+  ; the last ticket could have been sold. `verified-seed` ABORTS unless the
+  ; signature is the genuine one for exactly that drand round, and it binds the
+  ; round key into the seed, so one beacon gives unrelated seeds to different
+  ; rounds and to other games that use drand.
+  (defun round-seed:integer (rk:string dr:integer sig-hex:string)
+    @doc "This round's draw seed from its pinned drand beacon: verified against \
+    \drand's public key (a forged or wrong-round signature aborts), bound to the \
+    \round key, reduced to [0, DRAW-SEED-RANGE). Read-only."
+    (mod (verified-seed (format "prize-draw|{}" [rk]) dr sig-hex) DRAW-SEED-RANGE))
 
   (defun decidable:bool (id:string seq:integer)
     @doc "Can this round be drawn now? Read-only, and true only when the round is \
-    \still selling, its draw is open, and a candidate block is on record."
+    \still selling and the chain's clock has passed the moment drand publishes \
+    \its pinned beacon."
     (with-read rounds (round-key id seq)
-      { "decide-height" := dh, "state" := st }
-      (and (= st "selling")
-           (and (!= dh 0) (!= (decided-height dh) -1)))))
+      { "decide-height" := dr, "state" := st }
+      (and (= st "selling") (>= (now-time) (time-of-round dr)))))
 
   (defun draw-status:object (id:string seq:integer)
-    @doc "Where a round stands on its way to a draw: whether the draw is open, \
-    \its candidate heights, and which of them is on record. Read-only."
+    @doc "Where a SELLING round stands on its way to a draw: its pinned drand \
+    \round, when drand publishes it, whether that moment has passed on the \
+    \chain's clock, and `escape-from`, the instant AFTER which the round could \
+    \escape if nobody draws it (at exactly that instant it cannot yet). \
+    \Read-only. For a settled round, read `get-round`."
     (with-read rounds (round-key id seq)
-      { "decide-height" := dh, "state" := st, "tickets" := n, "draws-at" := da }
-      { "state": st
-      , "tickets": n
-      , "draws-at": da
-      , "draw-open": (!= dh 0)
-      , "decide-height": dh
-      , "candidates": (if (= dh 0) [] (enumerate dh (+ dh (- DECIDE-WINDOW 1))))
-      , "block-recorded": (if (= dh 0) false (!= (decided-height dh) -1))
-      , "deciding-block": (if (= dh 0) -1 (decided-height dh)) }))
+      { "decide-height" := dr, "state" := st, "tickets" := n, "draws-at" := da }
+      (enforce (= st "selling") "this round is settled — read get-round for its result")
+      (let ((due (time-of-round dr)))
+        { "state": st
+        , "tickets": n
+        , "draws-at": da
+        , "drand-round": dr
+        , "beacon-at": due
+        , "beacon-due": (>= (now-time) due)
+        , "escape-from": (add-time due ESCAPE-AFTER-SECONDS) })))
 
   (defun draw-candidate:integer (dseed:integer rkey:string i:integer m:integer)
     @doc "One uniform candidate in [0, m) — a domain-separated re-hash of the \
@@ -592,14 +587,10 @@
       (format "prize-fund ceiling must be > 0 and <= {}" [MAX-ROUND-FUND]))
     (enforce (>= max-fund (+ seed-cap price))
       "the prize-fund ceiling must exceed the bonus cap by at least one ticket, or no ticket could be sold")
-    ; The crank share and its weights. Weights are a RATIO, not percentages:
-    ; [1 1] splits evenly, [3 1] gives the recorder three quarters, [0 1] pays
-    ; the recorder nothing. ANY distribution is allowed; the only structural rule
-    ; is that the weights cannot both be zero, because they are a divisor.
-    ; 🔴 What a zero recorder weight gives up: recording is what fixes the draw,
-    ; and an INDEPENDENT recorder is what removes the house's best-of-three
-    ; (see DECIDE-WINDOW). Paying nothing here leaves that control resting
-    ; entirely on recorders that run for other reasons.
+    ; The crank share: what whoever sends the draw is paid, as a part of the fee.
+    ; `bounty-split` is retained and unread (see the raffle schema); it is still
+    ; checked to the shape it always had, [recorder drawer] weights not all zero,
+    ; so every row written before and after this version has one shape.
     (enforce-unit bounty-share)
     (enforce (and (> bounty-share 0.0) (<= bounty-share 1.0))
       "the crank share must be more than 0 and at most 1 of the fee")
@@ -735,8 +726,8 @@
   ; nothing; it only moves an error from a buyer to the operator who can fix it.
   (defun schedule-round:string (id:string opens-at:time closes-at:time draws-at:time)
     @doc "Operator: set when the NEXT round sells and draws — sales open at \
-    \`opens-at`, close at `closes-at`, and the candidate blocks are fixed at or \
-    \after `draws-at`. Frozen into the round by its first ticket; until then it \
+    \`opens-at`, close at `closes-at`, and the round is decided by the last \
+    \drand beacon published within DRAND-MARGIN-SECONDS after `draws-at`. Frozen into the round by its first ticket; until then it \
     \may be set again, and a schedule nobody buys into simply expires."
     (with-read raffles id { "active" := active, "current" := current }
       (enforce active "this raffle is retired — no new rounds open")
@@ -879,27 +870,31 @@
               ; waits for the operator to schedule again.
               (enforce (< t nca)
                 (format "the scheduled round closed at {} with no ticket sold — the operator must schedule again" [(iso nca)]))
-              (insert rounds rk
-                { "raffle-id": id, "seq": new-seq
-                , "opens-at": noa, "closes-at": nca, "draws-at": nda
-                , "price": gprice, "rake": grake, "tiers": gtiers
-                , "numbered": numbered, "max-tickets": gmax
-                , "max-fund": gfund
-                , "bounty-share": gbshare, "bounty-split": gbsplit
-                , "seed-in": bucket
-                , "sales": 0.0, "tickets": 0
-                , "decide-height": 0
-                , "state": "selling"
-                , "draw-seed": -1, "deciding-block": -1
-                , "ranks": [], "amounts": [], "accounts": []
-                , "escape-unit": 0.0 })
-              (update raffles id
-                { "round-seq": new-seq, "current": rk
-                , "seed-bucket": 0.0, "bound": (+ bound bucket)
-                ; consumed: the round after this one needs its own schedule
-                , "next-opens-at": EPOCH, "next-closes-at": EPOCH, "next-draws-at": EPOCH })
-              (emit-event (ROUND-OPENED id new-seq noa nca nda gprice grake bucket))
-              "opened"))
+              ; The round's beacon, pinned now from the frozen draw instant and
+              ; bound only after every schedule check above, so an unscheduled
+              ; raffle (EPOCH) reports that, never drand's genesis refusal.
+              (let ((dr (drand-round-for nda)))
+                (insert rounds rk
+                  { "raffle-id": id, "seq": new-seq
+                  , "opens-at": noa, "closes-at": nca, "draws-at": nda
+                  , "price": gprice, "rake": grake, "tiers": gtiers
+                  , "numbered": numbered, "max-tickets": gmax
+                  , "max-fund": gfund
+                  , "bounty-share": gbshare, "bounty-split": gbsplit
+                  , "seed-in": bucket
+                  , "sales": 0.0, "tickets": 0
+                  , "decide-height": dr
+                  , "state": "selling"
+                  , "draw-seed": -1, "deciding-block": -1
+                  , "ranks": [], "amounts": [], "accounts": []
+                  , "escape-unit": 0.0 })
+                (update raffles id
+                  { "round-seq": new-seq, "current": rk
+                  , "seed-bucket": 0.0, "bound": (+ bound bucket)
+                  ; consumed: the round after this one needs its own schedule
+                  , "next-opens-at": EPOCH, "next-closes-at": EPOCH, "next-draws-at": EPOCH })
+                (emit-event (ROUND-OPENED id new-seq noa nca nda gprice grake bucket dr))
+                "opened")))
         ; ---- every ticket, first or later: the ROUND's frozen terms ----------
         (with-read rounds rk
           { "seq" := rseq, "opens-at" := oa, "closes-at" := ca, "price" := price
@@ -954,35 +949,19 @@
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DRAW ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  ; The candidates are anchored to the round's draw instant, not to its close:
-  ; between close and draw nothing exists that could decide the round, so nobody,
-  ; the house included, can know the winner before the advertised moment. Anyone
-  ; may send this, and whoever does chooses nothing that matters: the height it
-  ; fixes is DECIDE-DELAY blocks in the future, whose hash nobody has.
-  (defun open-draw:string (id:string seq:integer)
-    @doc "Permissionless: at or after the round's draw instant, fix its three \
-    \candidate blocks, starting DECIDE-DELAY blocks after the one this lands in. \
-    \From here the lowest recorded candidate decides, and anyone may draw."
-    (let ((rk (round-key id seq)))
-      (with-read rounds rk
-        { "state" := st, "decide-height" := dh, "draws-at" := da }
-        (enforce (= st "selling") "this round is not selling")
-        (enforce (= dh 0) "the draw is already open")
-        (enforce (>= (now-time) da) (format "the draw opens at {}" [(iso da)]))
-        (let ((h (+ (now) DECIDE-DELAY)))
-          (update rounds rk { "decide-height": h })
-          (emit-event (DRAW-OPENED id seq h))
-          (format "{} round {}: candidate blocks {} to {}" [id seq h (+ h (- DECIDE-WINDOW 1))])))))
-
-  ; Winners never act. There is no attempt and no retry: the deciding block is
-  ; the lowest recorded of DECIDE-WINDOW candidates fixed at the draw instant,
-  ; final the moment it exists, so the winner this returns is the one `preview`
-  ; returned to anyone who asked, from the moment that block was recorded.
-  (defun draw:string (id:string seq:integer payee:string)
-    @doc "Permissionless: settle the round from the hash of the block that \
-    \decided it. k = min(tiers, tickets) winners are PAID IN THIS TRANSACTION, \
-    \the fee is taken, and two crank shares go to whoever recorded the deciding \
-    \block and to `payee`."
+  ; Winners never act. There is no attempt and no retry: the beacon is the one
+  ; drand round pinned at the round's first ticket, and exactly one valid
+  ; signature exists for it, so the winner this returns is the one `preview`
+  ; returned to anyone who asked, from the moment drand published it. Anyone may
+  ; send it, and whoever does chooses nothing: a wrong or forged signature
+  ; aborts inside `verified-seed`. No time check is needed either — the beacon
+  ; for a round drand has not published yet does not exist, so nothing can
+  ; verify early.
+  (defun draw:string (id:string seq:integer payee:string sig-hex:string)
+    @doc "Permissionless: settle the round from its pinned drand beacon \
+    \(`sig-hex`, the beacon's signature as drand publishes it). k = \
+    \min(tiers, tickets) winners are PAID IN THIS TRANSACTION, the fee is \
+    \taken, and the crank share goes to `payee`."
     (validate-payer payee "bounty payee")
     (let* ((rk (round-key id seq))
            (pool (pool-account id))
@@ -990,44 +969,15 @@
       (with-read rounds rk
         { "state" := st, "decide-height" := dh
         , "sales" := sales, "tickets" := n, "rake" := rake, "tiers" := tiers
-        , "seed-in" := seed-in, "bounty-share" := bshare, "bounty-split" := bsplit }
+        , "seed-in" := seed-in, "bounty-share" := bshare }
         (enforce (= st "selling") "this round is already settled")
-        (enforce (!= dh 0) "the draw has not been opened yet")
-        ; The deciding block is the LOWEST RECORDED candidate in the window, final
-        ; from the moment it exists (see DECIDE-WINDOW).
-        (let ((d0 (decided-height dh)))
-          (enforce (!= d0 -1) "no deciding block is recorded for this round"))
-        (let* ((d (decided-height dh))
-               (bhash (hash-of d))
-               ; The attester is the gas payer of the transaction that wrote the
-               ; block, so it is an account that exists and can receive. The
-               ; deployed block-history is attested-only: every row is an engine
-               ; value, so there is no trusted input left to exclude.
-               (recorder (at 'by (get-attested d)))
-               (dseed (round-seed rk bhash))
+        (let* ((dseed (round-seed rk dh sig-hex))
                (fee (floor (* rake sales) PREC))
-               (bounty-pool (floor (* fee bshare) PREC))
-               ; Two roles end a round and each is paid out of the FEE, never the
-               ; prize fund: whoever recorded the deciding block, and whoever sent
-               ; this draw. block-history records the gas payer, so on a chain the
-               ; attester always exists — an empty one only fires in a REPL that
-               ; forgot to set a sender. But it is not a value this module chose,
-               ; so it gets the same treatment as any other payout target: no
-               ; record share for an empty attester, and none for a module-guarded
-               ; one, which could not receive a transfer and would abort a draw
-               ; whose escape is already closed. The draw share absorbs whatever
-               ; the record share does not take.
-               ; The round's own weights, a ratio in the order [recorder drawer].
-               ; Divide AFTER multiplying and floor to PREC: decimal division here
-               ; is unbounded, and an unfloored value must never reach a transfer.
-               ; The drawer takes what is left, so the dust of the floor and an
-               ; unpayable recorder's share land there rather than stranding.
-               (wsum (+ (at 0 bsplit) (at 1 bsplit)))
-               (rec-bounty (if (or (= recorder "") (= "m:" (take 2 recorder)))
-                               0.0
-                               (floor (/ (* bounty-pool (dec (at 0 bsplit))) (dec wsum)) PREC)))
-               (draw-bounty (- bounty-pool rec-bounty))
-               (to-revenue (- fee bounty-pool))
+               ; One role ends a round and is paid out of the FEE, never the prize
+               ; fund: whoever sends this draw. Floored to PREC so an unfloored
+               ; value never reaches a transfer.
+               (draw-bounty (floor (* fee bshare) PREC))
+               (to-revenue (- fee draw-bounty))
                (fund (+ (- sales fee) seed-in))
                (k (if (< n (length tiers)) n (length tiers)))
                (ranks (draw-ranks dseed rk n k))
@@ -1035,23 +985,21 @@
                (accounts (map (lambda (r:integer)
                                 (at 'account (read tickets (ticket-key rk r))))
                               ranks))
-               ; Every outflow of this transaction — winners, both crank shares
+               ; Every outflow of this transaction — winners, the crank share
                ; and the fee — aggregated per DISTINCT account. Pact 5's managed
                ; install identity is (sender, receiver) and EXCLUDES the amount,
                ; so two installs to one account collide however different the
-               ; amounts are. The recorder is very often also the drawer and may
-               ; also be a winner, so aggregating all of them together is the
-               ; only shape that survives every aliasing case. Without this a
-               ; round whose winner also recorded its block would abort here
-               ; FOREVER, with the escape already closed by the recording.
+               ; amounts are. The drawer may also be a winner, and a winner may
+               ; hold several winning ranks, so aggregating all of them together
+               ; is the only shape that survives every aliasing case. Without it
+               ; such a round would abort here on every attempt.
                (outflows (filter (lambda (o:object) (> (at 'amount o) 0.0))
                            ; `+` is BINARY in Pact 5, exactly like `or` and `and`.
                            (+ (map (lambda (i:integer)
                                      { "account": (at i accounts)
                                      , "amount":  (at i amounts) })
                                    (enumerate 0 (- k 1)))
-                              [ { "account": recorder, "amount": rec-bounty }
-                              , { "account": payee,    "amount": draw-bounty }
+                              [ { "account": payee,    "amount": draw-bounty }
                               , { "account": revenue,  "amount": to-revenue } ])))
                (payees (fold (lambda (acc:[object] o:object) (merge-payee acc o))
                              [] outflows)))
@@ -1068,17 +1016,13 @@
           (map (lambda (i:integer)
                  (emit-event (WINNER-PAID id seq (at i accounts) (at i amounts))))
                (enumerate 0 (- k 1)))
-          (if (> rec-bounty 0.0)
-              (let ((e (emit-event (BOUNTY-PAID id seq "record" recorder rec-bounty))))
-                "record share paid")
-              "no record share")
           (if (> draw-bounty 0.0)
               (let ((e (emit-event (BOUNTY-PAID id seq "draw" payee draw-bounty))))
                 "draw share paid")
               "no draw share")
-          (emit-event (FEE-PAID id seq fee bounty-pool))
+          (emit-event (FEE-PAID id seq fee draw-bounty))
           (update rounds rk
-            { "state": "drawn", "draw-seed": dseed, "deciding-block": d
+            { "state": "drawn", "draw-seed": dseed, "deciding-block": dh
             , "ranks": ranks, "amounts": amounts, "accounts": accounts })
           (with-read raffles id
             { "pending" := pending, "rounds-done" := done
@@ -1098,33 +1042,36 @@
                 , "active": (if (and (> rlimit 0) (>= now-done rlimit))
                                 (if (and (= bucket 0.0) (= now-bound 0.0)) false active)
                                 active) })))
-          (emit-event (DRAWN id seq dseed d n ranks amounts accounts))
+          (emit-event (DRAWN id seq dseed dh n ranks amounts accounts))
           (format "{} round {}: seed {} ranks {} pay {}" [id seq dseed ranks amounts])))))
 
-  ; This is the fairness claim made checkable by a stranger: the site publishes
-  ; the candidate heights the moment the draw is opened, and this the instant a
-  ; candidate is recorded. It is unavailable before that — until then the outcome
-  ; genuinely is not determined, and saying otherwise would be a lie.
-  (defun preview:object (id:string seq:integer)
-    @doc "READ-ONLY: exactly what `draw` will do, computable by anyone from the \
-    \moment the deciding block is recorded and before the draw transaction is \
-    \sent. If a settled round ever disagrees with what this returned, the module \
-    \is broken."
+  ; This is the fairness claim made checkable by a stranger: from the moment drand
+  ; publishes a round's pinned beacon, anyone can pass it here and see exactly
+  ; who wins before the draw transaction is sent. It is unavailable before that
+  ; — until then the outcome genuinely is not determined, and saying otherwise
+  ; would be a lie.
+  (defun preview:object (id:string seq:integer sig-hex:string)
+    @doc "READ-ONLY: exactly what `draw` will do with this beacon, computable by \
+    \anyone from the moment drand publishes the round's pinned beacon. A wrong \
+    \or forged signature aborts, as it does in `draw`. If a draw ever disagrees \
+    \with what this returned, the module is broken. A SETTLED round is refused: \
+    \its result is in `get-round`, and anyone can recompute it with the public \
+    \`round-seed` and `draw-ranks`."
     (let ((rk (round-key id seq)))
       (with-read rounds rk
-        { "state" := st, "decide-height" := dh, "tickets" := n, "tiers" := tiers
+        { "state" := st, "decide-height" := dr, "tickets" := n, "tiers" := tiers
         , "sales" := sales, "rake" := rake, "seed-in" := seed-in }
-        (enforce (!= dh 0) "the draw has not been opened yet — nothing is decided")
-        (let ((d0 (decided-height dh)))
-          (enforce (!= d0 -1) "no deciding block is recorded for this round"))
-        (let* ((d (decided-height dh))
-               (bhash (hash-of d))
-               (dseed (round-seed rk bhash))
+        ; Refused where it happens (review C-1): the two rounds decided by a block
+        ; before drand hold a block height here, which is also a real past drand
+        ; round, so answering would name winners who did not win. A settled round
+        ; has nothing left to preview.
+        (enforce (= st "selling") "this round is settled — read get-round for its result")
+        (let* ((dseed (round-seed rk dr sig-hex))
                (k (if (< n (length tiers)) n (length tiers)))
                (ranks (draw-ranks dseed rk n k))
                (fee (floor (* rake sales) PREC))
                (fund (+ (- sales fee) seed-in)))
-          { "state": st, "decide-height": dh, "deciding-block": d, "block-hash": bhash
+          { "state": st, "drand-round": dr
           , "draw-seed": dseed, "ranks": ranks
           , "amounts": (tier-amounts fund tiers k)
           , "accounts": (map (lambda (r:integer)
@@ -1133,43 +1080,27 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ESCAPE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  ; TWO WAYS IN.
-  ; 1. Nobody opened the draw within OPEN-DRAW-GRACE-SECONDS of the draw instant.
-  ; 2. No candidate in its DECIDE-WINDOW was recorded. That is permanent once the
-  ;    last candidate's one recording block has passed, and the round then escapes
-  ;    at once.
-  ; It is closed FOREVER once a candidate is recorded, so nobody can wait out an
-  ; outcome they dislike. Every round has at least one ticket, so the refund is
-  ; always a real division: stake plus an exact per-ticket share of the bonus.
+  ; ONE WAY IN: nobody drew the round within ESCAPE-AFTER-SECONDS of the moment
+  ; drand was due to publish its pinned beacon. Until an escape lands a draw still
+  ; settles the round normally, so the escape can never overturn a round anybody
+  ; drew. Every round has at least one ticket, so the refund is always a real
+  ; division: stake plus an exact per-ticket share of the bonus.
   (defun escape:string (id:string seq:integer)
-    @doc "Last resort, permissionless: a round escapes when it can never be \
-    \drawn — its draw was never opened, or no candidate block was recorded. It \
-    \books every buyer their own stake plus their exact share of the bonus, \
-    \selects no winner and takes no fee."
+    @doc "Last resort, permissionless: a round escapes when nobody has drawn it \
+    \for ninety days after its drand beacon was due — drand stopped, or the game \
+    \was abandoned. It books every buyer their own stake plus their exact share \
+    \of the bonus, selects no winner and takes no fee."
     (let ((rk (round-key id seq)))
       (with-read rounds rk
-        { "state" := st, "decide-height" := dh, "draws-at" := da
+        { "state" := st, "decide-height" := dr
         , "sales" := sales, "tickets" := n, "seed-in" := seed-in }
         (enforce (= st "selling") "this round is settled")
         ; a frozen module states its own preconditions: a round exists only from
         ; its first ticket, so this cannot fail, and the division below is safe.
         (enforce (> n 0) "this round has no tickets")
-        ; With no draw opened there are no candidates, so nothing can be
-        ; recorded; `decided-height` is never asked about height 0.
-        (let* ((opened (!= dh 0))
-               (recorded (if opened (!= (decided-height dh) -1) false)))
-          (enforce (not recorded)
-            "this round can be drawn — draw it, do not escape it")
-          ; The draw was never opened: the round waits a grace past its draw
-          ; instant, during which anyone may still open it, then escapes.
-          (enforce (or opened (> (diff-time (now-time) da) OPEN-DRAW-GRACE-SECONDS))
-            "the draw has not been opened — anyone may open it once its draw instant passes, and this round can only escape a day after that")
-          ; No candidate recorded: the round waits only while one still CAN be.
-          ; The last candidate, dh + DECIDE-WINDOW - 1, is recordable only in block
-          ; dh + DECIDE-WINDOW, so after that nothing can change and the round
-          ; escapes at once.
-          (enforce (or (not opened) (> (now) (+ dh DECIDE-WINDOW)))
-            "the deciding window is still open — a candidate block can still be recorded")
+        (enforce (> (diff-time (now-time) (time-of-round dr)) ESCAPE-AFTER-SECONDS)
+          (format "this round can still be drawn — it may escape only if nobody draws it by {}"
+                  [(iso (add-time (time-of-round dr) ESCAPE-AFTER-SECONDS))]))
           (let* ((pot seed-in)
                  (unit (floor (/ pot (dec n)) PREC))
                  (booked (+ sales (* unit (dec n))))
@@ -1207,9 +1138,8 @@
             ; remainder of a rate no buyer can be paid at, swept so it cannot wedge
             ; the raffle's wind-down.
             (update rounds rk { "state": "escaped", "escape-unit": unit })
-            (emit-event (ESCAPED id seq dh booked))
-            (format "{} round {} escaped: {}"
-              [id seq (if opened "block was never recorded" "the draw was never opened")]))))))
+            (emit-event (ESCAPED id seq dr booked))
+            (format "{} round {} escaped: nobody drew it" [id seq])))))
 
   (defun claim-escape:string (id:string seq:integer account:string)
     @doc "Permissionless push: pay one account its stake back, plus its share of \
@@ -1238,7 +1168,7 @@
     @doc "A raffle's terms, schedule, bonus bucket and ledger." (read raffles id))
 
   (defun get-round:object (id:string seq:integer)
-    @doc "A round: frozen terms, sales, its deciding block and the draw result."
+    @doc "A round: frozen terms, sales, its pinned drand round and the draw result."
     (read rounds (round-key id seq)))
 
   (defun get-ticket:object (id:string seq:integer rank:integer)

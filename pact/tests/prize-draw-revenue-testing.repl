@@ -32,35 +32,36 @@
   (smartpacts.prize-draw.initialize (smartpacts.token-stub.funding-account)))
 (commit-tx)
 (env-sigs [])
-;; a full round: the fee must land in the stub's funding account, net of the two crank
-;; shares. The round sells and draws by the calendar the operator names; the first
-;; ticket opens it; the clock drives sales and the draw instant, the heights drive the
-;; candidate blocks.
+;; a full round: the fee must land in the stub's funding account, net of the crank
+;; share. The round sells and draws by the calendar the operator names; the first
+;; ticket opens it and pins its drand round; the clock drives sales, and drand's
+;; beacon for that round decides it. The calendar is in the PAST: a beacon for a drand
+;; round not yet published cannot be fetched into the fixture.
 (env-chain-data { "block-height": 1000, "block-time": (time "2026-09-15T12:00:00Z") })
 (begin-tx)(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
 (smartpacts.prize-draw.create-raffle "fee" 1.0 0.06 [1.0] 0 false 0.0 0 200.0 0.20 [1 1])
-(smartpacts.prize-draw.schedule-round "fee" (time "2026-09-16T00:00:00Z") (time "2026-10-15T06:00:00Z") (time "2026-10-15T14:00:00Z"))
+(smartpacts.prize-draw.schedule-round "fee" (time "2026-09-16T00:00:00Z") (time "2026-09-20T06:00:00Z") (time "2026-09-20T14:00:00Z"))
 (commit-tx)(env-sigs [])
 (begin-tx)(env-chain-data { "block-height": 1001, "block-time": (time "2026-09-16T00:00:00Z") })(env-sigs [ { "key": "9111111111111111111111111111111111111111111111111111111111111111", "caps": [ (coin.TRANSFER "k:9111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "fee") 100.0) ] } ])
 (expect "REV-3b the first ticket opens the round" "bought 50 ticket(s) in fee round 1"
   (smartpacts.prize-draw.buy "fee" "k:9111111111111111111111111111111111111111111111111111111111111111" 50 []))
 (smartpacts.prize-draw.buy "fee" "k:9111111111111111111111111111111111111111111111111111111111111111" 50 [])(commit-tx)
 (env-sigs [])
-;; at the draw instant the draw is opened from block 1020: candidates 1022..1024; block
-;; 1022 is recorded from 1023 and the draw is sent in that same block
-(begin-tx)(env-chain-data { "block-height": 1020, "block-time": (time "2026-10-15T14:00:00Z"), "sender": "k:anyone" })(smartpacts.prize-draw.open-draw "fee" 1)(commit-tx)
-(begin-tx)(env-chain-data { "block-height": 1023, "prev-block-hash": "REV-1022", "sender": "k:b070000000000000000000000000000000000000000000000000000000000005" })(free.block-history.attest)
+;; drand publishes the round's pinned beacon three minutes after the draw instant; the
+;; drawer (the "c" persona) sends the draw with it. The "b" persona is a bystander: there
+;; is no recorder role, so nobody but the drawer takes a share.
+(begin-tx)(env-chain-data { "block-height": 1023, "block-time": (time "2026-09-20T14:03:00Z"), "sender": "k:c4a4000000000000000000000000000000000000000000000000000000000009" })
 (let ((f0 (coin.get-balance (smartpacts.token-stub.funding-account))))
-  (smartpacts.prize-draw.draw "fee" 1 "k:c4a4000000000000000000000000000000000000000000000000000000000009")
+  (smartpacts.prize-draw.draw "fee" 1 "k:c4a4000000000000000000000000000000000000000000000000000000000009" (beacons.sig-for "fee" 1))
   (expect "REV-4 the draw credited the stub's funding account with the fee net of the bounty pool: 6.0 - 1.2" 4.8
     (- (coin.get-balance (smartpacts.token-stub.funding-account)) f0)))
-(expect "REV-4b the bounty pool went to the recorder and the drawer, half each" { "recorder": 10.6, "drawer": 10.6 }
-  { "recorder": (coin.get-balance "k:b070000000000000000000000000000000000000000000000000000000000005"), "drawer": (coin.get-balance "k:c4a4000000000000000000000000000000000000000000000000000000000009") })
+(expect "REV-4b the whole crank share, 1.2, went to the drawer; the bystander was paid nothing" { "bystander": 10.0, "drawer": 11.2 }
+  { "bystander": (coin.get-balance "k:b070000000000000000000000000000000000000000000000000000000000005"), "drawer": (coin.get-balance "k:c4a4000000000000000000000000000000000000000000000000000000000009") })
 (commit-tx)
 (expect "REV-5 the pool emptied" 0.0 (coin.get-balance (smartpacts.prize-draw.pool-account "fee")))
 (expect "REV-6 the books balance" true (at 'ok (smartpacts.prize-draw.pool-status "fee")))
 ;; the escape's dust goes the same way: a 3-ticket round with a bonus that does not divide,
-;; whose draw nobody ever opens
+;; which nobody ever draws. Nothing here needs a beacon, so the calendar may be in the future.
 (env-chain-data { "block-height": 2000, "block-time": (time "2026-10-16T00:00:00Z") })
 (begin-tx)(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] }, { "key": "9111111111111111111111111111111111111111111111111111111111111111", "caps": [ (coin.TRANSFER "k:9111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "dust") 1.0) ] } ])
 (smartpacts.prize-draw.create-raffle "dust" 1.0 0.06 [1.0] 0 false 1.0 0 200.0 0.20 [1 1])
@@ -70,10 +71,16 @@
 (begin-tx)(env-chain-data { "block-height": 2001, "block-time": (time "2026-10-17T00:00:00Z") })(env-sigs [ { "key": "9111111111111111111111111111111111111111111111111111111111111111", "caps": [ (coin.TRANSFER "k:9111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "dust") 3.0) ] } ])
 (smartpacts.prize-draw.buy "dust" "k:9111111111111111111111111111111111111111111111111111111111111111" 3 [])(commit-tx)
 (env-sigs [])
-;; a day past the draw instant with the draw never opened, the round escapes
-(begin-tx)(env-chain-data { "block-height": 2020, "block-time": (time "2026-10-19T06:00:01Z") })
+;; draws at Oct 18 06:00 => drand round 21594102, published 06:02:58; the escape opens
+;; strictly more than ninety days after that
+(begin-tx)(env-chain-data { "block-height": 2019, "block-time": (time "2027-01-16T06:02:58Z") })
+(expect-failure "REV-6b at exactly ninety days after the beacon was due the round can still be drawn, so it cannot escape"
+  "this round can still be drawn — it may escape only if nobody draws it by 2027-01-16T06:02:58Z"
+  (smartpacts.prize-draw.escape "dust" 1))
+(rollback-tx)
+(begin-tx)(env-chain-data { "block-height": 2020, "block-time": (time "2027-01-16T06:02:59Z") })
 (let ((f0 (coin.get-balance (smartpacts.token-stub.funding-account))))
-  (expect "REV-7 nobody opened the draw, so the round escapes after the grace" "dust round 1 escaped: the draw was never opened" (smartpacts.prize-draw.escape "dust" 1))
+  (expect "REV-7 nobody drew it for ninety days after its beacon was due, so the round escapes" "dust round 1 escaped: nobody drew it" (smartpacts.prize-draw.escape "dust" 1))
   (expect "REV-8 the indivisible remainder of the 1.0 bonus over 3 tickets went to the stub's account" 0.000000000001
     (- (coin.get-balance (smartpacts.token-stub.funding-account)) f0)))
 (commit-tx)
