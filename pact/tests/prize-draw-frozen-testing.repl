@@ -118,7 +118,7 @@
             , "caps": [ (coin.TRANSFER "k:fa00000000000000000000000000000000000000000000000000000000000001"
                                        (smartpacts.prize-draw.pool-account "frz-a") 30.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "frz-a" "k:fa00000000000000000000000000000000000000000000000000000000000001" 3 [])
+(smartpacts.prize-draw.buy "frz-a" "k:fa00000000000000000000000000000000000000000000000000000000000001" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "frz-a")))
 (commit-tx)
 (env-sigs [])
 
@@ -160,7 +160,7 @@
             , "caps": [ (coin.TRANSFER "k:fb00000000000000000000000000000000000000000000000000000000000002"
                                        (smartpacts.prize-draw.pool-account "frz-b") 30.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "frz-b" "k:fb00000000000000000000000000000000000000000000000000000000000002" 3 [])
+(smartpacts.prize-draw.buy "frz-b" "k:fb00000000000000000000000000000000000000000000000000000000000002" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "frz-b")))
 (commit-tx)
 (env-sigs [])
 

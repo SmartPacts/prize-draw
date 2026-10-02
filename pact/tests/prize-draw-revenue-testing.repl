@@ -44,8 +44,8 @@
 (commit-tx)(env-sigs [])
 (begin-tx)(env-chain-data { "block-height": 1001, "block-time": (time "2026-09-16T00:00:00Z") })(env-sigs [ { "key": "9111111111111111111111111111111111111111111111111111111111111111", "caps": [ (coin.TRANSFER "k:9111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "fee") 100.0) ] } ])
 (expect "REV-3b the first ticket opens the round" "bought 50 ticket(s) in fee round 1"
-  (smartpacts.prize-draw.buy "fee" "k:9111111111111111111111111111111111111111111111111111111111111111" 50 []))
-(smartpacts.prize-draw.buy "fee" "k:9111111111111111111111111111111111111111111111111111111111111111" 50 [])(commit-tx)
+  (smartpacts.prize-draw.buy "fee" "k:9111111111111111111111111111111111111111111111111111111111111111" 50 [] (at 'expect (smartpacts.prize-draw.ticket-terms "fee"))))
+(smartpacts.prize-draw.buy "fee" "k:9111111111111111111111111111111111111111111111111111111111111111" 50 [] (at 'expect (smartpacts.prize-draw.ticket-terms "fee")))(commit-tx)
 (env-sigs [])
 ;; drand publishes the round's pinned beacon three minutes after the draw instant; the
 ;; drawer (the "c" persona) sends the draw with it. The "b" persona is a bystander: there
@@ -69,7 +69,7 @@
 (smartpacts.prize-draw.seed-raffle "dust" "k:9111111111111111111111111111111111111111111111111111111111111111" 1.0)
 (commit-tx)(env-sigs [])
 (begin-tx)(env-chain-data { "block-height": 2001, "block-time": (time "2026-10-17T00:00:00Z") })(env-sigs [ { "key": "9111111111111111111111111111111111111111111111111111111111111111", "caps": [ (coin.TRANSFER "k:9111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "dust") 3.0) ] } ])
-(smartpacts.prize-draw.buy "dust" "k:9111111111111111111111111111111111111111111111111111111111111111" 3 [])(commit-tx)
+(smartpacts.prize-draw.buy "dust" "k:9111111111111111111111111111111111111111111111111111111111111111" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "dust")))(commit-tx)
 (env-sigs [])
 ;; draws at Oct 18 06:00 => drand round 21594102, published 06:02:58; the escape opens
 ;; strictly more than ninety days after that

@@ -1,0 +1,223 @@
+;; prize-draw-upgrade2-testing.repl — the SECOND upgrade in place: the drand version live
+;; on mainnet01 chain 2 since 2026-09-30 (fixtures/prize-draw-v2-mainnet.pact, whose module
+;; form is character-identical to `describe-module` code on chain 2) is upgraded to
+;; pact/modules/prize-draw.pact, in which a ticket purchase states the round and the terms
+;; it was signed for (`buy` takes `expect`; `ticket-terms` and `terms-digest` are new and
+;; read-only). This suite proves:
+;;   I.   THE GAP on the live version: a re-term landing ahead of a first ticket is what
+;;        that ticket gets;
+;;   II.  every row the live version wrote reads back unchanged, a round SELLING across
+;;        the upgrade keeps its pinned beacon, takes a later ticket with its digest and
+;;        settles exactly as previewed on the terms it froze;
+;;   III. after the upgrade the same hostile change makes the purchase in flight abort;
+;;   IV.  the upgrade needs the admin keyset.
+;; No schema changed and no settlement path changed, so no row needs migrating and no
+;; round needs to be settled first.
+
+;; ---- namespaces --------------------------------------------------------------
+(env-data { "ns-admin": ["476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"] })
+(begin-tx)
+(module test-ns GOVERNANCE
+  (defcap GOVERNANCE () (enforce-guard (read-keyset "ns-admin")))
+  (defconst NS-GUARD (create-user-guard (succeed)))
+  (defun succeed () true))
+(define-namespace "smartpacts" test-ns.NS-GUARD test-ns.NS-GUARD)
+(define-namespace "free"       test-ns.NS-GUARD test-ns.NS-GUARD)
+(define-namespace "n_48867b242317a0216a67f8c7ca26696b5878e0e3" test-ns.NS-GUARD test-ns.NS-GUARD)
+(commit-tx)
+(env-data {})
+
+;; ---- coin stack ----------------------------------------------------------------
+(begin-tx)
+(load "../vendor/fixtures/fungible-v2.pact")
+(load "../vendor/fixtures/fungible-xchain-v1.pact")
+(load "../vendor/fixtures/coin.pact")
+(create-table coin.coin-table)
+(create-table coin.allocation-table)
+(commit-tx)
+
+;; ---- keysets: admin (upgrade) and operator are different keys ------------------
+(env-data
+  { "admin":    ["476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef"]
+  , "operator": ["09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987"] })
+(begin-tx)
+(namespace "smartpacts")
+(define-keyset "smartpacts.prize-draw-admin"    (read-keyset "admin"))
+(define-keyset "smartpacts.prize-draw-operator" (read-keyset "operator"))
+(commit-tx)
+
+;; ---- the dependency, as mainnet has it -----------------------------------
+;; Both versions pin the sealed drand verifier, already deployed on mainnet chain 2.
+(env-data { "ns": "free" })
+(env-chain-data { "chain-id": "2", "block-height": 100, "prev-block-hash": "H99"
+                , "block-time": (time "2026-09-10T00:00:00Z"), "sender": "deployer" })
+(begin-tx)
+(load "../vendor/drand.pact")
+(commit-tx)
+
+;; ---- revenue account and personas ---------------------------------------------
+(env-data
+  { "rev": ["a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f0098709b0f41a2f2b3b9f0c8ab6"]
+  , "a":   ["a11ce00000000000000000000000000000000000000000000000000000000001"]
+  , "b":   ["b0b0000000000000000000000000000000000000000000000000000000000002"]
+  , "d":   ["d0000000000000000000000000000000000000000000000000000000000000d1"] })
+(begin-tx)
+(coin.create-account "draw-revenue" (read-keyset "rev"))
+(test-capability (coin.COINBASE))
+(coin.coinbase "k:a11ce00000000000000000000000000000000000000000000000000000000001" (read-keyset "a") 5000.0)
+(coin.coinbase "k:b0b0000000000000000000000000000000000000000000000000000000000002" (read-keyset "b") 5000.0)
+(coin.coinbase "k:d0000000000000000000000000000000000000000000000000000000000000d1" (read-keyset "d") 10.0)
+(commit-tx)
+(env-data {})
+
+;; ---- the LIVE contract, byte-for-byte mainnet's ---------------------------------
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef", "caps": [] } ])
+(env-data { "ns": "smartpacts", "init": true })
+(begin-tx)
+(load "fixtures/prize-draw-v2-mainnet.pact")
+(smartpacts.prize-draw.initialize "draw-revenue")
+(commit-tx)
+
+(env-chain-data { "block-height": 400, "block-time": (time "2026-09-20T17:00:00Z") })
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [] } ])
+(begin-tx)
+(smartpacts.prize-draw.create-raffle "live" 1.0 0.05 [0.5 0.5] 0 false 0.0 0 100.0 0.5 [1 1])
+(smartpacts.prize-draw.create-raffle "wait" 1.0 0.05 [0.5 0.5] 0 false 0.0 0 100.0 0.5 [1 1])
+(smartpacts.prize-draw.create-raffle "gap"  1.0 0.05 [0.5 0.5] 0 false 0.0 0 100.0 0.5 [1 1])
+(smartpacts.prize-draw.schedule-round "live" (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z"))
+(smartpacts.prize-draw.schedule-round "wait" (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z"))
+(smartpacts.prize-draw.schedule-round "gap"  (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z"))
+(commit-tx)
+
+;; I. THE GAP, on the live version: sales are open, the operator re-terms, and the
+;; four-argument purchase that follows opens the round on the new terms.
+(env-chain-data { "block-height": 410, "block-time": (time "2026-09-20T17:15:00Z") })
+(begin-tx)
+(smartpacts.prize-draw.set-terms "gap" 1.0 0.999999999999 [1.0] 0 0.0 0 100.0 1.0 [1 1])
+(commit-tx)
+(env-sigs [ { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
+            , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" "m:smartpacts.prize-draw:gap" 2.0) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.buy "gap" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 2 [])
+(expect "U2-GAP under the live version a first ticket opens its round on a re-term that landed just ahead of it"
+  { "rake": 0.999999999999, "tiers": [1.0], "bounty-share": 1.0 }
+  (let ((r (smartpacts.prize-draw.get-round "gap" 1)))
+    { "rake": (at 'rake r), "tiers": (at 'tiers r), "bounty-share": (at 'bounty-share r) }))
+(commit-tx)
+(env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" "m:smartpacts.prize-draw:live" 3.0) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.buy "live" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 3 [])
+(commit-tx)
+(env-sigs [])
+
+;; what the live version stored, read whole before the upgrade
+(begin-tx)
+(module snap2 G
+  (defcap G () (enforce false "a test fixture is never upgraded"))
+  (defschema row v:object)
+  (deftable rows:{row})
+  (defun put:string (k:string v:object) (write rows k { "v": v }))
+  (defun got:object (k:string) (at 'v (read rows k))))
+(create-table rows)
+(snap2.put "raffle|live" (smartpacts.prize-draw.get-raffle "live"))
+(snap2.put "raffle|wait" (smartpacts.prize-draw.get-raffle "wait"))
+(snap2.put "raffle|gap"  (smartpacts.prize-draw.get-raffle "gap"))
+(snap2.put "round|live"  (smartpacts.prize-draw.get-round "live" 1))
+(snap2.put "round|gap"   (smartpacts.prize-draw.get-round "gap" 1))
+(snap2.put "ticket|live" (smartpacts.prize-draw.get-ticket "live" 1 0))
+(snap2.put "holding|live" (smartpacts.prize-draw.get-holding "live" 1 "k:a11ce00000000000000000000000000000000000000000000000000000000001"))
+(snap2.put "pool|live"   (smartpacts.prize-draw.pool-status "live"))
+(snap2.put "pool|gap"    (smartpacts.prize-draw.pool-status "gap"))
+(commit-tx)
+
+;; ===========================================================================
+;; THE UPGRADE: the new source over the live module, init false.
+;; ===========================================================================
+(env-chain-data { "block-height": 415, "block-time": (time "2026-09-20T17:20:00Z") })
+(env-data { "ns": "smartpacts", "init": false })
+(env-sigs [])
+(begin-tx)
+(expect-failure "U2-AUTH with no signature the admin keyset the load gate enforces is refused"
+  "Keyset failure"
+  (enforce-guard (keyset-ref-guard "smartpacts.prize-draw-admin")))
+(commit-tx)
+(env-sigs [ { "key": "476f5e8a97ad059ab4a585666252db4cc65404f0dbec9db72257d99fe276ebef", "caps": [] } ])
+(begin-tx)
+(load "../modules/prize-draw.pact")
+(commit-tx)
+(env-sigs [])
+(env-data {})
+(begin-tx)
+(load "fixtures/beacons.repl")
+(commit-tx)
+
+(begin-tx)
+(expect "U2-ROWS every row the live version wrote reads back unchanged, every field"
+  [ (snap2.got "raffle|live") (snap2.got "raffle|wait") (snap2.got "raffle|gap") (snap2.got "round|live")
+    (snap2.got "round|gap") (snap2.got "ticket|live") (snap2.got "holding|live") (snap2.got "pool|live") (snap2.got "pool|gap") ]
+  [ (smartpacts.prize-draw.get-raffle "live") (smartpacts.prize-draw.get-raffle "wait") (smartpacts.prize-draw.get-raffle "gap") (smartpacts.prize-draw.get-round "live" 1)
+    (smartpacts.prize-draw.get-round "gap" 1) (smartpacts.prize-draw.get-ticket "live" 1 0)
+    (smartpacts.prize-draw.get-holding "live" 1 "k:a11ce00000000000000000000000000000000000000000000000000000000001")
+    (smartpacts.prize-draw.pool-status "live") (smartpacts.prize-draw.pool-status "gap") ])
+(expect "U2-PIN the round selling across the upgrade keeps the drand round its first ticket pinned"
+  (smartpacts.prize-draw.drand-round-for (time "2026-09-20T17:40:00Z"))
+  (at 'decide-height (smartpacts.prize-draw.get-round "live" 1)))
+(expect "U2-TERMS ticket-terms reads a round the LIVE version opened: its number, its frozen terms and their digest"
+  { "seq": 1, "rake": 0.05, "on-sale": true, "expect": (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5 (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z")) }
+  (let ((q (smartpacts.prize-draw.ticket-terms "live")))
+    { "seq": (at 'seq q), "rake": (at 'rake q), "on-sale": (at 'on-sale q), "expect": (at 'expect q) }))
+(commit-tx)
+
+;; III. after the upgrade: the operator re-terms the open, unsold window; the purchase
+;; signed for the published terms aborts, and one that reads the game again buys.
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [] } ])
+(begin-tx)
+(smartpacts.prize-draw.set-terms "wait" 1.0 0.999999999999 [1.0] 0 0.0 0 100.0 1.0 [1 1])
+(commit-tx)
+(env-sigs [ { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
+            , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" "m:smartpacts.prize-draw:wait" 2.0) ] } ])
+(env-chain-data { "block-height": 420, "block-time": (time "2026-09-20T17:25:00Z") })
+(begin-tx)
+(expect-failure "U2-EXPECT after the upgrade the same re-term makes the purchase signed for the published terms abort"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "wait" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 2 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5 (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z"))))
+(expect "U2-EXPECT-b and it moved no money and opened no round"
+  { "round-seq": 0, "pending": 0.0 }
+  (let ((g (smartpacts.prize-draw.get-raffle "wait"))) { "round-seq": (at 'round-seq g), "pending": (at 'pending g) }))
+(commit-tx)
+
+;; II. the round selling across the upgrade takes a later ticket with its digest
+(env-sigs [ { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
+            , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" "m:smartpacts.prize-draw:live" 1.0) ] } ])
+(begin-tx)
+(expect-failure "U2-JOIN-N a round the live version opened refuses a later ticket stating another fee"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "live" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.06 [0.5 0.5] false 0 100.0 0.5 (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z"))))
+(expect "U2-JOIN a round the live version opened takes a later ticket that states its digest"
+  "bought 1 ticket(s) in live round 1"
+  (smartpacts.prize-draw.buy "live" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5 (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z"))))
+(commit-tx)
+(env-sigs [])
+
+;; and settles exactly as previewed, on the terms IT froze: sales 4.0, fee 0.2
+(env-chain-data { "block-height": 430, "block-time": (time "2026-09-20T17:45:00Z") })
+(begin-tx)
+(let* ((sig (beacons.sig-for "live" 1))
+       (p   (smartpacts.prize-draw.preview "live" 1 sig))
+       (d0  (coin.get-balance "k:d0000000000000000000000000000000000000000000000000000000000000d1"))
+       (r0  (coin.get-balance "draw-revenue"))
+       (out (smartpacts.prize-draw.draw "live" 1 "k:d0000000000000000000000000000000000000000000000000000000000000d1" sig))
+       (r   (smartpacts.prize-draw.get-round "live" 1)))
+  (expect "U2-DRAW the round selling across the upgrade settles exactly as previewed, from its pinned beacon"
+    { "ranks": (at 'ranks p), "amounts": (at 'amounts p), "seed": (at 'draw-seed p), "state": "drawn" }
+    { "ranks": (at 'ranks r), "amounts": (at 'amounts r), "seed": (at 'draw-seed r), "state": (at 'state r) })
+  (expect "U2-DRAW-b on the fee it froze: sales 4.0, fee 0.2, half to the drawer and half to revenue"
+    { "drawer": 0.1, "revenue": 0.1 }
+    { "drawer": (- (coin.get-balance "k:d0000000000000000000000000000000000000000000000000000000000000d1") d0), "revenue": (- (coin.get-balance "draw-revenue") r0) })
+  (expect "U2-DRAW-c its pool is empty and conservation holds" { "balance": 0.0, "ok": true }
+    (let ((s (smartpacts.prize-draw.pool-status "live")))
+      { "balance": (at 'balance s), "ok": (at 'ok s) })))
+(commit-tx)
+
+(print "prize-draw second-upgrade suite complete")

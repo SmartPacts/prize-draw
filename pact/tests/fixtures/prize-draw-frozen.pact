@@ -58,12 +58,14 @@
 ;; that history. Rounds drawn before it hold a BLOCK HEIGHT in `decide-height` and
 ;; `deciding-block`; rounds opened after it hold a DRAND ROUND there (see the
 ;; round schema). No schema changed, because a field added to a live table loads
-;; clean and aborts at its first access. The upgrade is sound only while NO round
-;; the old code opened is unsettled: with decide-height 0 (draw never opened) it
-;; could neither draw nor escape; with a block height (draw opened) this code reads
-;; a long-past drand round, so it could escape at once, taken by a buyer who can
-;; see they lost. The upgrade transaction's FIRST form refuses both
-;; (ops/mainnet-deploy/upgrade-precondition.pact).
+;; clean and aborts at its first access. That replacement was sound only while NO
+;; round the block-decided code opened was unsettled: with decide-height 0 (draw
+;; never opened) it could neither draw nor escape; with a block height (draw
+;; opened) this code reads a long-past drand round, so it could escape at once,
+;; taken by a buyer who can see they lost. The transaction that made the
+;; replacement refused both in its first form, and none existed. Every settlement
+;; function still refuses a settled round, so the two rounds drawn by a block are
+;; never read as drand rounds.
 ;;
 ;; FEES ARE MODULAR. The fee is per raffle, re-settable for
 ;; FUTURE rounds, and frozen into each round at open so it can never reach money
@@ -516,6 +518,37 @@
                acc)
           (+ acc [p]))))
 
+  ; WHAT A TICKET IS SIGNED FOR. A purchase names a raffle, and the chain decides
+  ; which round it lands in: a live one, or the next, created by that very ticket
+  ; from the raffle's terms and schedule as they stand. Whoever holds one operator
+  ; key could therefore change what a purchase in flight buys — re-term a window
+  ; just ahead of its first ticket, or re-open one a buyer's late transaction then
+  ; opens. So `buy` carries this digest of the round its buyer read, and aborts on
+  ; any other. It covers the round's number and the ten values a round freezes for
+  ; its buyers. The bonus is not among them: it can only be added.
+  (defun terms-digest:string (seq:integer price:decimal rake:decimal tiers:[decimal]
+                              numbered:bool max-tickets:integer max-fund:decimal
+                              bounty-share:decimal
+                              opens-at:time closes-at:time draws-at:time)
+    @doc "The digest a ticket purchase must state: the round's number and the \
+    \terms and instants that round freezes. Pure and public — a client computes \
+    \it from what it showed the buyer, or reads it from `ticket-terms`."
+    ; A decimal keeps the spelling it was written with (1.0 and 1.000000000000 are
+    ; equal and stored differently), and a hash sees the spelling. The four amounts
+    ; are floored to PREC — the precision `validate-terms` already holds them to, so
+    ; no value changes — which gives equal amounts one digest however they were
+    ; typed. Prize shares are not held to PREC and are hashed as stored.
+    ; A time is hashed through its text at MICROSECOND precision, never as a time:
+    ; the engine's own encoding of a time drops everything below the second
+    ; whenever the instant sits on a whole millisecond, so two instants up to
+    ; 0.999 s apart would share a digest and a schedule could move inside its own
+    ; second under a purchase in flight.
+    (hash [ seq (floor price PREC) (floor rake PREC) tiers numbered max-tickets
+            (floor max-fund PREC) (floor bounty-share PREC)
+            (format-time "%Y-%m-%dT%H:%M:%S.%vZ" opens-at)
+            (format-time "%Y-%m-%dT%H:%M:%S.%vZ" closes-at)
+            (format-time "%Y-%m-%dT%H:%M:%S.%vZ" draws-at) ]))
+
   (defun validate-id:string (id:string)
     @doc "Raffle ids feed every round key, every table key AND this raffle's pool \
     \account name, so everything those three require is refused here, at the one \
@@ -819,13 +852,15 @@
   ; schedule; every later buy joins it. A scheduled round nobody buys into is
   ; simply never a round, and the operator can change terms and dates freely
   ; until the first ticket is sold.
-  (defun buy:string (id:string account:string count:integer picks:[integer])
+  (defun buy:string (id:string account:string count:integer picks:[integer] expect:string)
     @doc "Buy tickets: pass an empty `picks` list to take the next `count` stubs, \
     \or a list of unsold numbers (in a numbered raffle) with `count` equal to its \
     \length, and sign coin.TRANSFER of count * price to this raffle's pool. Odds \
     \are your tickets over all tickets sold, and winners are paid at the draw — \
     \there is nothing to claim. The first ticket after the scheduled sales \
-    \instant opens the round."
+    \instant opens the round. `expect` is the `terms-digest` of the round you \
+    \read (`ticket-terms` gives it): the purchase aborts if the ticket would \
+    \land in any other round or on any other terms."
     (enforce (and (>= count 1) (<= count MAX-TICKETS-PER-TX))
       (format "count must be 1..{}" [MAX-TICKETS-PER-TX]))
     (enforce (or (= (length picks) 0) (= (length picks) count))
@@ -870,6 +905,13 @@
               ; waits for the operator to schedule again.
               (enforce (< t nca)
                 (format "the scheduled round closed at {} with no ticket sold — the operator must schedule again" [(iso nca)]))
+              ; A first ticket is refused BEFORE its round is written if the round
+              ; it would create is not the one its buyer read: the same digest the
+              ; round row is checked against below, taken here from the very values
+              ; the insert is about to freeze, so a refused purchase writes nothing.
+              (enforce (= expect (terms-digest new-seq gprice grake gtiers numbered gmax gfund
+                                               gbshare noa nca nda))
+                "this is not the round, or not the terms, this ticket was signed for — read the game again")
               ; The round's beacon, pinned now from the frozen draw instant and
               ; bound only after every schedule check above, so an unscheduled
               ; raffle (EPOCH) reports that, never drand's genesis refusal.
@@ -899,10 +941,19 @@
         (with-read rounds rk
           { "seq" := rseq, "opens-at" := oa, "closes-at" := ca, "price" := price
           , "max-tickets" := rmax, "sales" := sales, "tickets" := n0
-          , "state" := rstate, "seed-in" := rseed, "max-fund" := rfund }
+          , "state" := rstate, "seed-in" := rseed, "max-fund" := rfund
+          , "rake" := rrake, "tiers" := rtiers, "numbered" := rnumbered
+          , "bounty-share" := rbshare, "draws-at" := da }
           (enforce (= rstate "selling") "this round is no longer selling")
           (enforce (>= t oa) (format "sales have not opened yet — they open at {}" [(iso oa)]))
           (enforce (< t ca) "sales are closed for this round")
+          ; The round this ticket lands in must be the one its buyer read. Checked
+          ; against the ROUND row — the one path a later ticket takes, and for a
+          ; first ticket the same answer the check above gave before the insert —
+          ; and before anything is paid or written to a ticket.
+          (enforce (= expect (terms-digest rseq price rrake rtiers rnumbered rmax rfund
+                                           rbshare oa ca da))
+            "this is not the round, or not the terms, this ticket was signed for — read the game again")
           (enforce (or (= rmax 0) (<= (+ n0 count) rmax))
             "not enough tickets left in this raffle")
           (let* ((total (* price (dec count)))
@@ -1163,6 +1214,43 @@
             (format "paid {} to {}" [amount account]))))))
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; VIEWS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  ; Selected exactly as `buy` selects: the live round while it sells, otherwise
+  ; the round the next first ticket would create from the raffle as it stands.
+  (defun ticket-terms:object (id:string)
+    @doc "READ-ONLY: the round a ticket bought now would land in — its number, \
+    \the terms and instants it freezes, whether the chain's clock has it on \
+    \sale (not whether tickets or room under the prize ceiling are left), and \
+    \`expect`, the digest `buy` must be given."
+    (with-read raffles id
+      { "current" := current, "numbered" := numbered, "round-seq" := seq
+      , "active" := active, "rounds-limit" := rlimit, "rounds-used" := rused
+      , "price" := gprice, "rake" := grake, "tiers" := gtiers
+      , "max-tickets" := gmax, "max-fund" := gfund, "bounty-share" := gbshare
+      , "next-opens-at" := noa, "next-closes-at" := nca, "next-draws-at" := nda }
+      (let* ((t (now-time))
+             (pr (if (= current "") {} (read rounds current)))
+             (live (if (= current "") false
+                       (and (= (at 'state pr) "selling") (< t (at 'closes-at pr)))))
+             (s  (if live (at 'seq pr) (+ seq 1)))
+             (p  (if live (at 'price pr) gprice))
+             (r  (if live (at 'rake pr) grake))
+             (ti (if live (at 'tiers pr) gtiers))
+             (nu (if live (at 'numbered pr) numbered))
+             (mt (if live (at 'max-tickets pr) gmax))
+             (mf (if live (at 'max-fund pr) gfund))
+             (bs (if live (at 'bounty-share pr) gbshare))
+             (oa (if live (at 'opens-at pr) noa))
+             (ca (if live (at 'closes-at pr) nca))
+             (da (if live (at 'draws-at pr) nda)))
+        { "seq": s, "price": p, "rake": r, "tiers": ti, "numbered": nu
+        , "max-tickets": mt, "max-fund": mf, "bounty-share": bs
+        , "opens-at": oa, "closes-at": ca, "draws-at": da
+        , "on-sale": (if live true
+                         (and active
+                           (and (or (= rlimit 0) (< rused rlimit))
+                             (and (!= noa EPOCH) (and (>= t noa) (< t nca))))))
+        , "expect": (terms-digest s p r ti nu mt mf bs oa ca da) })))
 
   (defun get-raffle:object (id:string)
     @doc "A raffle's terms, schedule, bonus bucket and ledger." (read raffles id))

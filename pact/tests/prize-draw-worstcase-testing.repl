@@ -114,7 +114,7 @@
 (env-gas 0)
 (expect "WORST-1b the first ticket creates the round and freezes its calendar"
   "bought 1 ticket(s) in max round 1"
-  (smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max"))))
 (let ((used (env-gas)))
   (print (format "WORST-CASE FIRST-BUY GAS (creates the round): {} of 150000" [used]))
   (expect-that "WORST-1b2 the first buy fits the block gas limit"
@@ -133,47 +133,47 @@
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000002"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000002" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000003"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000003" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000003" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000003" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000004"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000004" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000004" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000004" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000005"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000005" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000005" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000005" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000006"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000006" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000006" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000006" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000007"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000007" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000007" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000007" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000008"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000008" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000008" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000008" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000009"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000009" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000009" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000009" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "000000000000000000000000000000000000000000000000000000000000000a"
             , "caps": [ (coin.TRANSFER "k:000000000000000000000000000000000000000000000000000000000000000a" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:000000000000000000000000000000000000000000000000000000000000000a" 1 [])
+(smartpacts.prize-draw.buy "max" "k:000000000000000000000000000000000000000000000000000000000000000a" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (env-sigs [])
 
@@ -261,52 +261,52 @@
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000001"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
 (expect "WORST-2R the first ticket opens round 2" "bought 1 ticket(s) in max round 2"
-  (smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max"))))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000002"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000002" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000003"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000003" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000003" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000003" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000004"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000004" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000004" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000004" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000005"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000005" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000005" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000005" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000006"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000006" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000006" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000006" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000007"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000007" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000007" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000007" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000008"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000008" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000008" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000008" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000009"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000009" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000009" 1 [])
+(smartpacts.prize-draw.buy "max" "k:0000000000000000000000000000000000000000000000000000000000000009" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "000000000000000000000000000000000000000000000000000000000000000a"
             , "caps": [ (coin.TRANSFER "k:000000000000000000000000000000000000000000000000000000000000000a" (smartpacts.prize-draw.pool-account "max") 1.0) ] } ])
-(smartpacts.prize-draw.buy "max" "k:000000000000000000000000000000000000000000000000000000000000000a" 1 [])
+(smartpacts.prize-draw.buy "max" "k:000000000000000000000000000000000000000000000000000000000000000a" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "max")))
 (commit-tx)
 (env-sigs [])
 ;; draws at Sep 23 01:00 => drand round 20868102, published 01:02:58
@@ -364,7 +364,7 @@
 (env-sigs [ { "key": "0000000000000000000000000000000000000000000000000000000000000003"
             , "caps": [ (coin.TRANSFER "k:0000000000000000000000000000000000000000000000000000000000000003" (smartpacts.prize-draw.pool-account "bulk") 1.0) ] } ])
 (expect "WORST-BUY-1 the first ticket opens the round and binds the bonus" "bought 1 ticket(s) in bulk round 1"
-  (smartpacts.prize-draw.buy "bulk" "k:0000000000000000000000000000000000000000000000000000000000000003" 1 []))
+  (smartpacts.prize-draw.buy "bulk" "k:0000000000000000000000000000000000000000000000000000000000000003" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "bulk"))))
 (commit-tx)
 (begin-tx)
 (env-chain-data { "block-height": 361, "block-time": (time "2026-10-18T12:00:00Z") })
@@ -372,13 +372,13 @@
             , "caps": [ (coin.TRANSFER "k:5ea1000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "bulk") 50.0) ] } ])
 (env-gas 0)
 (expect "WORST-BUY-2 a later buy of MAX-TICKETS-PER-TX joins the round" "bought 50 ticket(s) in bulk round 1"
-  (smartpacts.prize-draw.buy "bulk" "k:5ea1000000000000000000000000000000000000000000000000000000000002" 50 []))
+  (smartpacts.prize-draw.buy "bulk" "k:5ea1000000000000000000000000000000000000000000000000000000000002" 50 [] (at 'expect (smartpacts.prize-draw.ticket-terms "bulk"))))
 (let ((used (env-gas)))
   (print (format "WORST-CASE LATER-BUY GAS (50 tickets): {} of 150000" [used]))
   (expect-that "WORST-BUY-2b the largest buy fits the block gas limit"
     (lambda (g:integer) (< g 150000)) used))
 (expect-failure "WORST-BUY-3 and 51 in one transaction is refused" "count must be 1..50"
-  (smartpacts.prize-draw.buy "bulk" "k:5ea1000000000000000000000000000000000000000000000000000000000002" 51 []))
+  (smartpacts.prize-draw.buy "bulk" "k:5ea1000000000000000000000000000000000000000000000000000000000002" 51 [] (at 'expect (smartpacts.prize-draw.ticket-terms "bulk"))))
 (commit-tx)
 (env-sigs [])
 

@@ -93,7 +93,7 @@
                                        (smartpacts.prize-draw.pool-account "frozen") 100.0) ] } ])
 (expect "VISION-0b the first ticket creates round 1"
   "bought 10 ticket(s) in frozen round 1"
-  (smartpacts.prize-draw.buy "frozen" "k:1111111111111111111111111111111111111111111111111111111111111111" 10 []))
+  (smartpacts.prize-draw.buy "frozen" "k:1111111111111111111111111111111111111111111111111111111111111111" 10 [] (at 'expect (smartpacts.prize-draw.ticket-terms "frozen"))))
 (commit-tx)
 (env-sigs [])
 
@@ -389,7 +389,7 @@
 (env-chain-data { "block-height": 802, "block-time": (time "2026-09-04T23:59:59Z") })
 (expect-failure "VISION-CAL-4a no ticket sells before the instant the operator named — and so no round exists"
   "sales have not opened yet — they open at 2026-09-05T00:00:00Z"
-  (smartpacts.prize-draw.buy "cal" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 []))
+  (smartpacts.prize-draw.buy "cal" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cal"))))
 (expect "VISION-CAL-4a2 no round row exists before the first ticket" ""
   (at 'current (smartpacts.prize-draw.get-raffle "cal")))
 (rollback-tx)
@@ -397,7 +397,7 @@
 (env-chain-data { "block-height": 803, "block-time": (time "2026-09-05T00:00:00Z") })
 (expect "VISION-CAL-3 the first ticket sells at that instant, creates the round and freezes the instants that stood when it landed"
   "bought 1 ticket(s) in cal round 1"
-  (smartpacts.prize-draw.buy "cal" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 []))
+  (smartpacts.prize-draw.buy "cal" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cal"))))
 (expect "VISION-CAL-3b the round row carries them"
   { "opens": (time "2026-09-05T00:00:00Z"), "closes": (time "2026-09-06T00:00:00Z"), "draws": (time "2026-09-06T06:00:00Z") }
   (let ((r (smartpacts.prize-draw.get-round "cal" 1)))
@@ -415,13 +415,13 @@
 (env-chain-data { "block-height": 803, "block-time": (time "2026-09-05T12:00:00Z") })
 (expect "VISION-CAL-4b a later ticket joins the round inside the window"
   "bought 1 ticket(s) in cal round 1"
-  (smartpacts.prize-draw.buy "cal" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 []))
+  (smartpacts.prize-draw.buy "cal" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cal"))))
 (commit-tx)
 (begin-tx)
 (env-chain-data { "block-height": 804, "block-time": (time "2026-09-06T00:00:00Z") })
 (expect-failure "VISION-CAL-4c and none at the instant sales close"
   "sales are closed for this round"
-  (smartpacts.prize-draw.buy "cal" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 []))
+  (smartpacts.prize-draw.buy "cal" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cal"))))
 (rollback-tx)
 (env-sigs [])
 
@@ -547,7 +547,7 @@
 (let* ((buyer "k:1111111111111111111111111111111111111111111111111111111111111111")
        ;; 1. the first ticket, inside the sales window
        (t1 (env-chain-data { "block-height": 900, "block-time": (time "2026-09-16T00:00:00Z") }))
-       (s1 (smartpacts.prize-draw.buy "simple" buyer 2 []))
+       (s1 (smartpacts.prize-draw.buy "simple" buyer 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "simple"))))
        (d1 (smartpacts.prize-draw.decidable "simple" 1))
        ;; the draw instant passes; drand has not published the pinned round yet
        (t2 (env-chain-data { "block-height": 920, "block-time": (time "2026-09-17T06:00:00Z") }))
@@ -606,11 +606,11 @@
 (env-sigs [ { "key": "1111111111111111111111111111111111111111111111111111111111111111"
             , "caps": [ (coin.TRANSFER "k:1111111111111111111111111111111111111111111111111111111111111111"
                                        (smartpacts.prize-draw.pool-account "infl") 6.0) ] } ])
-(smartpacts.prize-draw.buy "infl" "k:1111111111111111111111111111111111111111111111111111111111111111" 6 [])
+(smartpacts.prize-draw.buy "infl" "k:1111111111111111111111111111111111111111111111111111111111111111" 6 [] (at 'expect (smartpacts.prize-draw.ticket-terms "infl")))
 (env-sigs [ { "key": "2222222222222222222222222222222222222222222222222222222222222222"
             , "caps": [ (coin.TRANSFER "k:2222222222222222222222222222222222222222222222222222222222222222"
                                        (smartpacts.prize-draw.pool-account "infl") 4.0) ] } ])
-(smartpacts.prize-draw.buy "infl" "k:2222222222222222222222222222222222222222222222222222222222222222" 4 [])
+(smartpacts.prize-draw.buy "infl" "k:2222222222222222222222222222222222222222222222222222222222222222" 4 [] (at 'expect (smartpacts.prize-draw.ticket-terms "infl")))
 (commit-tx)
 (env-sigs [])
 
@@ -647,7 +647,7 @@
 (expect-failure "VISION-INFLUENCE-1e claim-escape on a round that did not escape is refused" "did not escape"
   (smartpacts.prize-draw.claim-escape "infl" 1 "k:1111111111111111111111111111111111111111111111111111111111111111"))
 (expect-failure "VISION-INFLUENCE-1g a ticket into a closed round is refused" "sales are closed for this round"
-  (smartpacts.prize-draw.buy "infl" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 []))
+  (smartpacts.prize-draw.buy "infl" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "infl"))))
 (expect "VISION-INFLUENCE-1h the pair stands: the drand round pinned, nothing decided"
   { "decide-height": 20816502, "deciding-block": -1 }
   (let ((r (smartpacts.prize-draw.get-round "infl" 1)))
@@ -795,7 +795,7 @@
                                        (smartpacts.prize-draw.pool-account "infl") 1.0) ] } ])
 (expect "VISION-INFLUENCE-5 a later ticket opens round 2, not round 1"
   "bought 1 ticket(s) in infl round 2"
-  (smartpacts.prize-draw.buy "infl" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 []))
+  (smartpacts.prize-draw.buy "infl" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "infl"))))
 (expect "VISION-INFLUENCE-5b round 2 pins its own drand round, from its own draw instant"
   20839302 (at 'decide-height (smartpacts.prize-draw.get-round "infl" 2)))
 (expect "VISION-INFLUENCE-5c and round 1's pair stands"
@@ -816,6 +816,105 @@
   (let ((r (smartpacts.prize-draw.get-round "infl" 1)))
     { "decide-height": (at 'decide-height r), "deciding-block": (at 'deciding-block r) }))
 (rollback-tx)
+(env-sigs [])
+
+;; ---------------------------------------------------------------------------
+;; VISION-EXPECT — A TICKET LANDS ON THE ROUND AND THE TERMS ITS BUYER READ, OR
+;; NOT AT ALL. One operator key can change a game while a purchase is in flight;
+;; the purchase states what it was signed for, so each of the three ways to make
+;; it land on other terms ends in an aborted purchase and an untouched balance.
+;; ---------------------------------------------------------------------------
+(env-chain-data { "block-height": 1300, "block-time": (time "2026-11-09T00:00:00Z") })
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.create-raffle "vx1" 1.0 0.05 [0.5 0.3 0.2] 0 false 0.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.create-raffle "vx2" 1.0 0.05 [0.5 0.3 0.2] 0 false 0.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.create-raffle "vx3" 1.0 0.05 [0.5 0.3 0.2] 0 false 0.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.schedule-round "vx1" (time "2026-11-10T00:00:00Z") (time "2026-11-11T00:00:00Z") (time "2026-11-11T06:00:00Z"))
+(smartpacts.prize-draw.schedule-round "vx2" (time "2026-11-10T00:00:00Z") (time "2026-11-11T00:00:00Z") (time "2026-11-11T06:00:00Z"))
+(smartpacts.prize-draw.schedule-round "vx3" (time "2026-11-10T00:00:00Z") (time "2026-11-11T00:00:00Z") (time "2026-11-11T06:00:00Z"))
+(commit-tx)
+
+;; PATH 1 — sales are open and unsold: the operator moves the opening one microsecond
+;; ahead and re-terms in the same transaction; the buyer's purchase lands a block later.
+(env-chain-data { "block-height": 1301, "block-time": (time "2026-11-10T12:00:00Z") })
+(begin-tx)
+(smartpacts.prize-draw.schedule-round "vx1" (add-time (time "2026-11-10T12:00:00Z") 0.000001) (time "2026-11-11T00:00:00Z") (time "2026-11-11T06:00:00Z"))
+(smartpacts.prize-draw.set-terms "vx1" 1.0 0.999999999999 [1.0] 0 0.0 0 200.0 1.0 [1 1])
+(commit-tx)
+(env-chain-data { "block-height": 1302, "block-time": (time "2026-11-10T12:00:30Z") })
+(env-sigs [ { "key": "1111111111111111111111111111111111111111111111111111111111111111"
+            , "caps": [ (coin.TRANSFER "k:1111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "vx1") 10.0) ] } ])
+(begin-tx)
+(expect-failure "VISION-EXPECT-1 a window re-scheduled and re-termed ahead of its first ticket does not take the purchase signed for the published terms"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "vx1" "k:1111111111111111111111111111111111111111111111111111111111111111" 10 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-10T00:00:00Z") (time "2026-11-11T00:00:00Z") (time "2026-11-11T06:00:00Z"))))
+(commit-tx)
+
+;; a live round for path 3, bought on the published terms
+(env-sigs [ { "key": "1111111111111111111111111111111111111111111111111111111111111111"
+            , "caps": [ (coin.TRANSFER "k:1111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "vx3") 2.0) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.buy "vx3" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-10T00:00:00Z") (time "2026-11-11T00:00:00Z") (time "2026-11-11T06:00:00Z")))
+(expect-failure "VISION-EXPECT-6 a ticket JOINS a live round only on that round's own statement: one stating another fee is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "vx3" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.999999999999 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-10T00:00:00Z") (time "2026-11-11T00:00:00Z") (time "2026-11-11T06:00:00Z"))))
+(commit-tx)
+
+;; PATH 2 — at the closing instant of an unsold window the operator re-terms and re-opens
+;; it one microsecond later; a purchase signed before the close is mined after it.
+(env-chain-data { "block-height": 1303, "block-time": (time "2026-11-11T00:00:00Z") })
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.set-terms "vx2" 1.0 0.999999999999 [1.0] 0 0.0 0 200.0 1.0 [1 1])
+(smartpacts.prize-draw.schedule-round "vx2" (add-time (time "2026-11-11T00:00:00Z") 0.000001) (time "2026-11-12T00:00:00Z") (time "2026-11-12T06:00:00Z"))
+;; PATH 3 — with round 1 of vx3 sold and closing, the operator schedules round 2 right
+;; after its close and re-terms "for future rounds".
+(smartpacts.prize-draw.set-terms "vx3" 1.0 0.999999999999 [1.0] 0 0.0 0 200.0 1.0 [1 1])
+(smartpacts.prize-draw.schedule-round "vx3" (add-time (time "2026-11-11T00:00:00Z") 0.000001) (time "2026-11-12T00:00:00Z") (time "2026-11-12T06:00:00Z"))
+(commit-tx)
+(env-chain-data { "block-height": 1304, "block-time": (time "2026-11-11T00:00:30Z") })
+(env-sigs [ { "key": "1111111111111111111111111111111111111111111111111111111111111111"
+            , "caps": [ (coin.TRANSFER "k:1111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "vx2") 10.0)
+                      , (coin.TRANSFER "k:1111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "vx3") 10.0) ] } ])
+(begin-tx)
+(expect-failure "VISION-EXPECT-2 a window re-termed and re-opened at its close does not take the purchase signed before the close"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "vx2" "k:1111111111111111111111111111111111111111111111111111111111111111" 10 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-10T00:00:00Z") (time "2026-11-11T00:00:00Z") (time "2026-11-11T06:00:00Z"))))
+(expect-failure "VISION-EXPECT-3 a purchase signed for the live round and mined after its close does not become the next round's first ticket"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "vx3" "k:1111111111111111111111111111111111111111111111111111111111111111" 10 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-10T00:00:00Z") (time "2026-11-11T00:00:00Z") (time "2026-11-11T06:00:00Z"))))
+(expect "VISION-EXPECT-4 the three hostile changes all landed, and no round opened on them: the buyer's only ticket is the one bought on the published terms"
+  { "vx1": 0, "vx2": 0, "vx3": 1, "vx3-rake": 0.05, "hostile-rake": 0.999999999999 }
+  { "vx1": (at 'round-seq (smartpacts.prize-draw.get-raffle "vx1")), "vx2": (at 'round-seq (smartpacts.prize-draw.get-raffle "vx2"))
+  , "vx3": (at 'round-seq (smartpacts.prize-draw.get-raffle "vx3")), "vx3-rake": (at 'rake (smartpacts.prize-draw.get-round "vx3" 1))
+  , "hostile-rake": (at 'rake (smartpacts.prize-draw.get-raffle "vx1")) })
+(expect "VISION-EXPECT-5 and a buyer who reads the game again sees the new terms before signing anything"
+  { "seq": 1, "rake": 0.999999999999, "tiers": [1.0], "bounty-share": 1.0, "on-sale": true }
+  (let ((q (smartpacts.prize-draw.ticket-terms "vx2")))
+    { "seq": (at 'seq q), "rake": (at 'rake q), "tiers": (at 'tiers q), "bounty-share": (at 'bounty-share q), "on-sale": (at 'on-sale q) }))
+(commit-tx)
+(env-sigs [])
+
+;; PATH 4 — before a window opens the operator moves its three instants by 0.999 s, each
+;; inside its own second; the buyer read the whole-second schedule.
+(env-chain-data { "block-height": 1310, "block-time": (time "2026-11-12T00:00:00Z") })
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.create-raffle "vx4" 1.0 0.05 [0.5 0.3 0.2] 0 false 0.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.schedule-round "vx4" (time "2026-11-13T00:00:00Z") (time "2026-11-14T00:00:00Z") (time "2026-11-14T06:00:01Z"))
+(commit-tx)
+(begin-tx)
+(smartpacts.prize-draw.schedule-round "vx4" (add-time (time "2026-11-13T00:00:00Z") 0.999) (add-time (time "2026-11-14T00:00:00Z") 0.999) (add-time (time "2026-11-14T06:00:01Z") 0.999))
+(commit-tx)
+(env-chain-data { "block-height": 1311, "block-time": (time "2026-11-13T12:00:00Z") })
+(env-sigs [ { "key": "1111111111111111111111111111111111111111111111111111111111111111"
+            , "caps": [ (coin.TRANSFER "k:1111111111111111111111111111111111111111111111111111111111111111" (smartpacts.prize-draw.pool-account "vx4") 1.0) ] } ])
+(begin-tx)
+(expect-failure "VISION-EXPECT-7 a schedule moved by less than a second does not take the purchase signed for the whole-second one"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "vx4" "k:1111111111111111111111111111111111111111111111111111111111111111" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-13T00:00:00Z") (time "2026-11-14T00:00:00Z") (time "2026-11-14T06:00:01Z"))))
+(commit-tx)
 (env-sigs [])
 
 (print "prize-draw vision suite complete")

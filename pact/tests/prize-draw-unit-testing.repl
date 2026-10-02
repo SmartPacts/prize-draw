@@ -302,7 +302,7 @@
 (env-events true)
 (expect "BUY-1 the first buy OPENS round 1 and takes 3 tickets"
   "bought 3 ticket(s) in w1 round 1"
-  (smartpacts.prize-draw.buy "w1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 3 []))
+  (smartpacts.prize-draw.buy "w1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "w1"))))
 (expect "BUY-1b the first ticket emits ROUND-OPENED, then TICKETS-BOUGHT — the round exists from this ticket"
   { "order": ["smartpacts.prize-draw.ROUND-OPENED" "smartpacts.prize-draw.TICKETS-BOUGHT"]
   , "opened": [ ["w1" 1 (time "2026-09-16T00:00:00Z") (time "2026-09-20T06:00:00Z") (time "2026-09-20T14:00:00Z") 1.0 0.05 0.0 20797302] ] }
@@ -339,7 +339,7 @@
 (env-events true)
 (expect "BUY-5 a second buyer joins the same round"
   "bought 2 ticket(s) in w1 round 1"
-  (smartpacts.prize-draw.buy "w1" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 2 []))
+  (smartpacts.prize-draw.buy "w1" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "w1"))))
 (expect "BUY-5b a join emits TICKETS-BOUGHT only — no second ROUND-OPENED, no second round"
   { "names": ["smartpacts.prize-draw.TICKETS-BOUGHT"], "round-seq": 1, "rounds-used": 1 }
   { "names": (filter (lambda (n:string) (!= n "coin.TRANSFER")) (map (at 'name) (env-events true)))
@@ -379,7 +379,7 @@
 (begin-tx)
 (expect "TERMS-3 a late buyer still pays the round's frozen price, not the new one"
   "bought 1 ticket(s) in w1 round 1"
-  (smartpacts.prize-draw.buy "w1" "k:ca40100000000000000000000000000000000000000000000000000000000003" 1 []))
+  (smartpacts.prize-draw.buy "w1" "k:ca40100000000000000000000000000000000000000000000000000000000003" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "w1"))))
 (expect "TERMS-4 sales rose by the frozen price only" 6.0
   (at 'sales (smartpacts.prize-draw.get-round "w1" 1)))
 (commit-tx)
@@ -404,7 +404,7 @@
 (begin-tx)
 (expect-failure "BUY-6b a buy after sales close cannot join the closed round, and cannot open a new one"
   "sales are closed for this round — the next round is not scheduled yet"
-  (smartpacts.prize-draw.buy "w1" "k:da40100000000000000000000000000000000000000000000000000000000004" 1 []))
+  (smartpacts.prize-draw.buy "w1" "k:da40100000000000000000000000000000000000000000000000000000000004" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "w1"))))
 (rollback-tx)
 (env-sigs [])
 
@@ -426,7 +426,7 @@
 (begin-tx)
 (expect "BUY-7 a buy after sales close lands in the newly scheduled round 2, not the old one — it CREATES round 2"
   "bought 1 ticket(s) in w1 round 2"
-  (smartpacts.prize-draw.buy "w1" "k:da40100000000000000000000000000000000000000000000000000000000004" 1 []))
+  (smartpacts.prize-draw.buy "w1" "k:da40100000000000000000000000000000000000000000000000000000000004" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "w1"))))
 (commit-tx)
 (env-sigs [])
 
@@ -447,21 +447,21 @@
 (env-chain-data { "block-height": 22 })
 (begin-tx)
 (expect-failure "BUY-N1 zero tickets is refused"
-  "count must be" (smartpacts.prize-draw.buy "w1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 0 []))
+  "count must be" (smartpacts.prize-draw.buy "w1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 0 [] (at 'expect (smartpacts.prize-draw.ticket-terms "w1"))))
 (expect-failure "BUY-N2 more than the per-transaction bound is refused"
-  "count must be" (smartpacts.prize-draw.buy "w1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 51 []))
+  "count must be" (smartpacts.prize-draw.buy "w1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 51 [] (at 'expect (smartpacts.prize-draw.ticket-terms "w1"))))
 (expect-failure "BUY-N3 picks in a raffle that does not use them is refused"
-  "does not use picked numbers" (smartpacts.prize-draw.buy "w1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [4]))
+  "does not use picked numbers" (smartpacts.prize-draw.buy "w1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [4] (at 'expect (smartpacts.prize-draw.ticket-terms "w1"))))
 (expect-failure "BUY-N4 a picks list of the wrong length is refused"
-  "exactly `count`" (smartpacts.prize-draw.buy "rifa" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [1]))
+  "exactly `count`" (smartpacts.prize-draw.buy "rifa" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [1] (at 'expect (smartpacts.prize-draw.ticket-terms "rifa"))))
 (expect-failure "BUY-N5 a numbered raffle requires picks"
-  "requires you to pick" (smartpacts.prize-draw.buy "rifa" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 []))
+  "requires you to pick" (smartpacts.prize-draw.buy "rifa" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "rifa"))))
 (expect-failure "BUY-N6 a buy without the TRANSFER signature is refused"
   "Managed capability not installed"
-  (smartpacts.prize-draw.buy "w1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "w1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "w1"))))
 (expect-failure "BUY-N7 a module account cannot buy — a pool named as the buyer would let one raffle pay for another"
   "the buyer must not be a module account"
-  (smartpacts.prize-draw.buy "w1" (smartpacts.prize-draw.pool-account "rifa") 1 []))
+  (smartpacts.prize-draw.buy "w1" (smartpacts.prize-draw.pool-account "rifa") 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "w1"))))
 (rollback-tx)
 
 ;; ===========================================================================
@@ -475,7 +475,7 @@
 (begin-tx)
 (expect "RIFA-1 alice picks numbers 3 and 7"
   "bought 2 ticket(s) in rifa round 1"
-  (smartpacts.prize-draw.buy "rifa" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [3 7]))
+  (smartpacts.prize-draw.buy "rifa" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [3 7] (at 'expect (smartpacts.prize-draw.ticket-terms "rifa"))))
 (commit-tx)
 (env-sigs [])
 
@@ -490,17 +490,17 @@
             , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "rifa") 4.0) ] } ])
 (begin-tx)
 (expect-failure "NUMBER-UNIQUE-PER-ROUND a number already sold cannot be sold again"
-  "Value already found" (smartpacts.prize-draw.buy "rifa" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 2 [7 8]))
+  "Value already found" (smartpacts.prize-draw.buy "rifa" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 2 [7 8] (at 'expect (smartpacts.prize-draw.ticket-terms "rifa"))))
 (rollback-tx)
 
 (begin-tx)
 (expect-failure "RIFA-4 a number outside the supply is refused"
-  "outside this raffle" (smartpacts.prize-draw.buy "rifa" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [10]))
+  "outside this raffle" (smartpacts.prize-draw.buy "rifa" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [10] (at 'expect (smartpacts.prize-draw.ticket-terms "rifa"))))
 (rollback-tx)
 
 (begin-tx)
 (expect-failure "RIFA-5 a negative number is refused"
-  "outside this raffle" (smartpacts.prize-draw.buy "rifa" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [-1]))
+  "outside this raffle" (smartpacts.prize-draw.buy "rifa" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [-1] (at 'expect (smartpacts.prize-draw.ticket-terms "rifa"))))
 (rollback-tx)
 
 (env-sigs [ { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
@@ -508,7 +508,7 @@
 (begin-tx)
 (expect-failure "RIFA-6 the fixed supply cannot be oversold"
   "not enough tickets left"
-  (smartpacts.prize-draw.buy "rifa" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 9 [0 1 2 4 5 6 8 9 3]))
+  (smartpacts.prize-draw.buy "rifa" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 9 [0 1 2 4 5 6 8 9 3] (at 'expect (smartpacts.prize-draw.ticket-terms "rifa"))))
 (rollback-tx)
 (env-sigs [])
 
@@ -562,7 +562,7 @@
 (env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
             , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "xmas") 2.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "xmas" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [])
+(smartpacts.prize-draw.buy "xmas" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "xmas")))
 (commit-tx)
 (env-sigs [])
 
@@ -772,7 +772,7 @@
 (begin-tx)
 (expect-failure "ROUNDS-LIMIT-2 a retired one-off opens no further round — its next ticket is refused"
   "this raffle is retired — no new rounds open"
-  (smartpacts.prize-draw.buy "xmas" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "xmas" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "xmas"))))
 (rollback-tx)
 (env-sigs [])
 (begin-tx)
@@ -798,7 +798,7 @@
 (env-sigs [ { "key": "ca40100000000000000000000000000000000000000000000000000000000003"
             , "caps": [ (coin.TRANSFER "k:ca40100000000000000000000000000000000000000000000000000000000003" (smartpacts.prize-draw.pool-account "solo") 4.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "solo" "k:ca40100000000000000000000000000000000000000000000000000000000003" 4 [])
+(smartpacts.prize-draw.buy "solo" "k:ca40100000000000000000000000000000000000000000000000000000000003" 4 [] (at 'expect (smartpacts.prize-draw.ticket-terms "solo")))
 (commit-tx)
 (env-sigs [])
 
@@ -857,7 +857,7 @@
             , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "pin") 3.0) ] } ])
 (begin-tx)
 (env-events true)
-(smartpacts.prize-draw.buy "pin" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 3 [])
+(smartpacts.prize-draw.buy "pin" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "pin")))
 (expect "DECIDE-1 ROUND-OPENED names the three instants the round froze and, last, the drand round its first ticket pinned"
   [ ["pin" 1 (time "2026-09-16T00:00:00Z") (time "2026-09-20T06:00:00Z") (time "2026-09-20T14:00:00Z") 1.0 0.10 0.0 20797302] ]
   (map (lambda (e:object) (at 'params e))
@@ -900,7 +900,7 @@
 (env-chain-data { "block-height": 1002 })
 (env-sigs [ { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
             , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "pin") 2.0) ] } ])
-(begin-tx)(smartpacts.prize-draw.buy "pin" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 2 [])(commit-tx)
+(begin-tx)(smartpacts.prize-draw.buy "pin" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "pin")))(commit-tx)
 (env-sigs [])
 (begin-tx)
 (expect "DECIDE-4 neither a re-schedule, a re-term nor a later buy touched the live round's instants or its pinned drand round"
@@ -1021,8 +1021,8 @@
           , { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
             , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "twinB") 1.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "twinA" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])
-(smartpacts.prize-draw.buy "twinB" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [])
+(smartpacts.prize-draw.buy "twinA" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "twinA")))
+(smartpacts.prize-draw.buy "twinB" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "twinB")))
 (commit-tx)
 (env-sigs [])
 (env-chain-data { "block-height": 1110, "block-time": (time "2026-09-20T14:00:00Z") })
@@ -1067,7 +1067,7 @@
 (env-chain-data { "block-height": 1200, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "da40100000000000000000000000000000000000000000000000000000000004"
             , "caps": [ (coin.TRANSFER "k:da40100000000000000000000000000000000000000000000000000000000004" (smartpacts.prize-draw.pool-account "early") 2.0) ] } ])
-(begin-tx)(smartpacts.prize-draw.buy "early" "k:da40100000000000000000000000000000000000000000000000000000000004" 2 [])(commit-tx)
+(begin-tx)(smartpacts.prize-draw.buy "early" "k:da40100000000000000000000000000000000000000000000000000000000004" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "early")))(commit-tx)
 (env-sigs [])
 (env-chain-data { "block-height": 1205, "block-time": (time "2026-09-17T00:00:00Z") })
 (begin-tx)
@@ -1086,7 +1086,7 @@
 ;; the drawn round is not live, and the raffle has no schedule for another
 (expect-failure "EARLY-2 even so, a ticket cannot be bought into a round that has been drawn"
   "sales are closed for this round — the next round is not scheduled yet"
-  (smartpacts.prize-draw.buy "early" "k:da40100000000000000000000000000000000000000000000000000000000004" 1 []))
+  (smartpacts.prize-draw.buy "early" "k:da40100000000000000000000000000000000000000000000000000000000004" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "early"))))
 (rollback-tx)
 (env-sigs [])
 
@@ -1097,7 +1097,7 @@
 (env-chain-data { "block-height": 1250, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
             , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "alias") 4.0) ] } ])
-(begin-tx)(smartpacts.prize-draw.buy "alias" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 4 [])(commit-tx)
+(begin-tx)(smartpacts.prize-draw.buy "alias" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 4 [] (at 'expect (smartpacts.prize-draw.ticket-terms "alias")))(commit-tx)
 (env-sigs [])
 (env-chain-data { "block-height": 1263, "block-time": (time "2026-09-20T14:02:58Z") })
 (begin-tx)
@@ -1147,8 +1147,8 @@
           , { "key": "da40100000000000000000000000000000000000000000000000000000000004"
             , "caps": [ (coin.TRANSFER "k:da40100000000000000000000000000000000000000000000000000000000004" (smartpacts.prize-draw.pool-account "wta") 1.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "wta" "k:ca40100000000000000000000000000000000000000000000000000000000003" 2 [])
-(smartpacts.prize-draw.buy "wta" "k:da40100000000000000000000000000000000000000000000000000000000004" 1 [])
+(smartpacts.prize-draw.buy "wta" "k:ca40100000000000000000000000000000000000000000000000000000000003" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "wta")))
+(smartpacts.prize-draw.buy "wta" "k:da40100000000000000000000000000000000000000000000000000000000004" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "wta")))
 (commit-tx)
 (env-sigs [])
 (env-chain-data { "block-height": 1323, "block-time": (time "2026-09-20T14:02:58Z") })
@@ -1196,11 +1196,11 @@
 (env-chain-data { "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
             , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "stuck") 3.0) ] } ])
-(begin-tx)(smartpacts.prize-draw.buy "stuck" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 3 [])(commit-tx)
+(begin-tx)(smartpacts.prize-draw.buy "stuck" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "stuck")))(commit-tx)
 (env-sigs [])
 (env-sigs [ { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
             , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "stuck") 1.0) ] } ])
-(begin-tx)(smartpacts.prize-draw.buy "stuck" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [])(commit-tx)
+(begin-tx)(smartpacts.prize-draw.buy "stuck" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "stuck")))(commit-tx)
 (env-sigs [])
 
 ;; Nobody ever draws it. Its beacon is due 2026-09-20T14:02:58Z, so the escape
@@ -1402,7 +1402,7 @@
 (env-chain-data { "block-height": 500000, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
             , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "wedge") 2.0) ] } ])
-(begin-tx)(smartpacts.prize-draw.buy "wedge" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [])(commit-tx)
+(begin-tx)(smartpacts.prize-draw.buy "wedge" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "wedge")))(commit-tx)
 (env-sigs [])
 (env-chain-data { "block-height": 500013, "block-time": (time "2026-09-20T14:02:58Z") })
 (begin-tx)
@@ -1440,7 +1440,7 @@
 (env-chain-data { "block-height": 500300, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "ca40100000000000000000000000000000000000000000000000000000000003"
             , "caps": [ (coin.TRANSFER "k:ca40100000000000000000000000000000000000000000000000000000000003" (smartpacts.prize-draw.pool-account "once") 1.0) ] } ])
-(begin-tx)(smartpacts.prize-draw.buy "once" "k:ca40100000000000000000000000000000000000000000000000000000000003" 1 [])(commit-tx)
+(begin-tx)(smartpacts.prize-draw.buy "once" "k:ca40100000000000000000000000000000000000000000000000000000000003" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "once")))(commit-tx)
 (env-sigs [])
 ;; The gate is on the FIRST TICKET, which is the only thing that opens a round:
 ;; the rounds-limit counts rounds that sold, so with round 1 sold and still
@@ -1452,7 +1452,7 @@
 (begin-tx)
 (expect-failure "ROUNDS-LIMIT-COUNTS-OPENED a one-off cannot open a second round even before its first settles"
   "this raffle has run its last round"
-  (smartpacts.prize-draw.buy "once" "k:ca40100000000000000000000000000000000000000000000000000000000003" 1 []))
+  (smartpacts.prize-draw.buy "once" "k:ca40100000000000000000000000000000000000000000000000000000000003" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "once"))))
 (rollback-tx)
 (env-sigs [])
 ;; ...and a fresh schedule does not change that: the operator may set one, but
@@ -1466,7 +1466,7 @@
 (begin-tx)
 (expect-failure "ROUNDS-LIMIT-COUNTS-OPENED-b and a buy cannot open one either, at any time — even into a fresh schedule"
   "this raffle has run its last round"
-  (smartpacts.prize-draw.buy "once" "k:ca40100000000000000000000000000000000000000000000000000000000003" 1 []))
+  (smartpacts.prize-draw.buy "once" "k:ca40100000000000000000000000000000000000000000000000000000000003" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "once"))))
 (rollback-tx)
 (env-sigs [])
 
@@ -1488,7 +1488,7 @@
 (begin-tx)
 (expect-failure "RETIRED-1 a retired raffle opens no new round — the first ticket refuses it"
   "this raffle is retired — no new rounds open"
-  (smartpacts.prize-draw.buy "wta" "k:ca40100000000000000000000000000000000000000000000000000000000003" 1 []))
+  (smartpacts.prize-draw.buy "wta" "k:ca40100000000000000000000000000000000000000000000000000000000003" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "wta"))))
 (rollback-tx)
 (env-sigs [])
 (begin-tx)
@@ -1524,7 +1524,7 @@
 (begin-tx)
 (expect "FUND-CAP-1 a round may be filled right up to the cap"
   "bought 2 ticket(s) in whale round 1"
-  (smartpacts.prize-draw.buy "whale" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 2 []))
+  (smartpacts.prize-draw.buy "whale" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "whale"))))
 (commit-tx)
 (env-sigs [])
 
@@ -1533,7 +1533,7 @@
 (begin-tx)
 (expect-failure "FUND-CAP-REFUSES-BUY one more ticket would take the round past the cap"
   "reached its maximum prize fund"
-  (smartpacts.prize-draw.buy "whale" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 1 []))
+  (smartpacts.prize-draw.buy "whale" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "whale"))))
 (rollback-tx)
 (env-sigs [])
 
@@ -1636,7 +1636,7 @@
 (begin-tx)
 (env-chain-data { "block-height": 900000, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001", "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "strand-a") 1.0) ] } ])
-(smartpacts.prize-draw.buy "strand-a" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])
+(smartpacts.prize-draw.buy "strand-a" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "strand-a")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
@@ -1682,7 +1682,7 @@
 (begin-tx)
 (env-chain-data { "block-height": 900100, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001", "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "strand-b") 1.0) ] } ])
-(smartpacts.prize-draw.buy "strand-b" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])
+(smartpacts.prize-draw.buy "strand-b" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "strand-b")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] }
@@ -1705,7 +1705,7 @@
 (begin-tx)
 (env-chain-data { "block-height": 900200, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001", "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "strand-c") 1.0) ] } ])
-(smartpacts.prize-draw.buy "strand-c" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])
+(smartpacts.prize-draw.buy "strand-c" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "strand-c")))
 (commit-tx)
 (begin-tx)
 (env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] }
@@ -1759,7 +1759,7 @@
 (env-chain-data { "block-height": 1000000, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "3a1e00000000000000000000000000000000000000000000000000000000009c"
             , "caps": [ (coin.TRANSFER "k:3a1e00000000000000000000000000000000000000000000000000000000009c" (smartpacts.prize-draw.pool-account "cap-fee") 100.0) ] } ])
-(smartpacts.prize-draw.buy "cap-fee" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 10 [])
+(smartpacts.prize-draw.buy "cap-fee" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 10 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cap-fee")))
 (commit-tx)
 (env-sigs [])
 (begin-tx)
@@ -1778,7 +1778,7 @@
             , "caps": [ (coin.TRANSFER "k:3a1e00000000000000000000000000000000000000000000000000000000009c" (smartpacts.prize-draw.pool-account "cap-fee") 100.0) ] } ])
 (expect-failure "CEIL-4 sales can NOT run to twice the ceiling: under an intake cap the fee buys no room"
   "this round has reached its maximum prize fund"
-  (smartpacts.prize-draw.buy "cap-fee" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 10 []))
+  (smartpacts.prize-draw.buy "cap-fee" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 10 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cap-fee"))))
 (rollback-tx)
 (env-sigs [])
 (begin-tx)
@@ -1790,7 +1790,7 @@
             , "caps": [ (coin.TRANSFER "k:3a1e00000000000000000000000000000000000000000000000000000000009c" (smartpacts.prize-draw.pool-account "cap-fee") 10.0) ] } ])
 (expect-failure "CEIL-6 even ONE more ticket is refused: intake would be 110.0 though the fund would be only 55.0 — a net-fund cap would have let it in"
   "reached its maximum prize fund"
-  (smartpacts.prize-draw.buy "cap-fee" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 1 []))
+  (smartpacts.prize-draw.buy "cap-fee" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cap-fee"))))
 (rollback-tx)
 (env-sigs [])
 
@@ -1805,7 +1805,7 @@
 (env-chain-data { "block-height": 1000005, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "3a1e00000000000000000000000000000000000000000000000000000000009c"
             , "caps": [ (coin.TRANSFER "k:3a1e00000000000000000000000000000000000000000000000000000000009c" (smartpacts.prize-draw.pool-account "cap-seed") 50.0) ] } ])
-(smartpacts.prize-draw.buy "cap-seed" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 5 [])
+(smartpacts.prize-draw.buy "cap-seed" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 5 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cap-seed")))
 (commit-tx)
 (env-sigs [])
 (begin-tx)
@@ -1819,7 +1819,7 @@
             , "caps": [ (coin.TRANSFER "k:3a1e00000000000000000000000000000000000000000000000000000000009c" (smartpacts.prize-draw.pool-account "cap-seed") 10.0) ] } ])
 (expect-failure "CEIL-9 the BONUS counts toward the ceiling — one more ticket is refused"
   "reached its maximum prize fund"
-  (smartpacts.prize-draw.buy "cap-seed" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 1 []))
+  (smartpacts.prize-draw.buy "cap-seed" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cap-seed"))))
 (rollback-tx)
 (env-sigs [])
 
@@ -1842,7 +1842,7 @@
             , "caps": [ (coin.TRANSFER "k:3a1e00000000000000000000000000000000000000000000000000000000009c" (smartpacts.prize-draw.pool-account "cap-fee") 10.0) ] } ])
 (expect-failure "CEIL-13 raising it cannot let one more ticket into the round already selling"
   "reached its maximum prize fund"
-  (smartpacts.prize-draw.buy "cap-fee" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 1 []))
+  (smartpacts.prize-draw.buy "cap-fee" "k:3a1e00000000000000000000000000000000000000000000000000000000009c" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cap-fee"))))
 (rollback-tx)
 (env-sigs [])
 
@@ -1915,9 +1915,9 @@
           , { "key": "3111100000000000000000000000000000000000000000000000000000000011"
             , "caps": [ (coin.TRANSFER "k:3111100000000000000000000000000000000000000000000000000000000011" (smartpacts.prize-draw.pool-account "blind") 3.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "blind" "k:7e57000000000000000000000000000000000000000000000000000000000071" 4 [])
-(smartpacts.prize-draw.buy "blind" "k:7e57000000000000000000000000000000000000000000000000000000000072" 3 [])
-(smartpacts.prize-draw.buy "blind" "k:3111100000000000000000000000000000000000000000000000000000000011" 3 [])
+(smartpacts.prize-draw.buy "blind" "k:7e57000000000000000000000000000000000000000000000000000000000071" 4 [] (at 'expect (smartpacts.prize-draw.ticket-terms "blind")))
+(smartpacts.prize-draw.buy "blind" "k:7e57000000000000000000000000000000000000000000000000000000000072" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "blind")))
+(smartpacts.prize-draw.buy "blind" "k:3111100000000000000000000000000000000000000000000000000000000011" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "blind")))
 (commit-tx)
 (env-sigs [])
 
@@ -2125,7 +2125,7 @@
             , "caps": [ (coin.TRANSFER "k:7e57000000000000000000000000000000000000000000000000000000000072"
                                        (smartpacts.prize-draw.pool-account "lop") 60.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "lop" "k:7e57000000000000000000000000000000000000000000000000000000000072" 3 [])
+(smartpacts.prize-draw.buy "lop" "k:7e57000000000000000000000000000000000000000000000000000000000072" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "lop")))
 (commit-tx)
 (env-sigs [])
 
@@ -2214,7 +2214,7 @@
 (begin-tx)
 (expect "FRZ-3 the first ticket opens the round"
   "bought 3 ticket(s) in frz round 1"
-  (smartpacts.prize-draw.buy "frz" "k:3111100000000000000000000000000000000000000000000000000000000011" 3 []))
+  (smartpacts.prize-draw.buy "frz" "k:3111100000000000000000000000000000000000000000000000000000000011" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "frz"))))
 (commit-tx)
 (env-sigs [])
 
@@ -2298,7 +2298,7 @@
             , "caps": [ (coin.TRANSFER "k:7e57000000000000000000000000000000000000000000000000000000000071"
                                        (smartpacts.prize-draw.pool-account "zrec") 60.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "zrec" "k:7e57000000000000000000000000000000000000000000000000000000000071" 3 [])
+(smartpacts.prize-draw.buy "zrec" "k:7e57000000000000000000000000000000000000000000000000000000000071" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "zrec")))
 (commit-tx)
 (env-sigs [])
 
@@ -2365,7 +2365,7 @@
             , "caps": [ (coin.TRANSFER "k:7e57000000000000000000000000000000000000000000000000000000000072"
                                        (smartpacts.prize-draw.pool-account "allrec") 60.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "allrec" "k:7e57000000000000000000000000000000000000000000000000000000000072" 3 [])
+(smartpacts.prize-draw.buy "allrec" "k:7e57000000000000000000000000000000000000000000000000000000000072" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "allrec")))
 (commit-tx)
 (env-sigs [])
 
@@ -2523,7 +2523,7 @@
 (begin-tx)
 (expect "SCHED-3 the first ticket freezes the schedule into the round"
   "bought 1 ticket(s) in cal round 1"
-  (smartpacts.prize-draw.buy "cal" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "cal" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cal"))))
 (expect "SCHED-3b the round row carries the three instants, and the drand round its draws-at pins"
   { "opens-at": (time "2026-09-16T00:00:00Z"), "closes-at": (time "2026-09-20T06:00:00Z"), "draws-at": (time "2026-09-20T14:00:00Z"), "decide-height": 20797302 }
 
@@ -2544,7 +2544,7 @@
 (begin-tx)
 (expect-failure "SCHED-4 a second round needs its OWN schedule — with round 1 closed, the next ticket is refused for want of one"
   "sales are closed for this round — the next round is not scheduled yet"
-  (smartpacts.prize-draw.buy "cal" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "cal" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cal"))))
 (rollback-tx)
 (env-sigs [])
 (env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
@@ -2555,7 +2555,7 @@
 (begin-tx)
 (expect "SCHED-4b scheduled, the second round opens on its own instants at its first ticket"
   { "result": "bought 1 ticket(s) in cal round 2", "opens-at": (time "2026-09-21T00:00:00Z"), "closes-at": (time "2026-09-25T00:00:00Z"), "draws-at": (time "2026-09-25T12:00:00Z") }
-  (let ((res (smartpacts.prize-draw.buy "cal" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])))
+  (let ((res (smartpacts.prize-draw.buy "cal" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "cal")))))
     { "result": res
     , "opens-at": (at 'opens-at (smartpacts.prize-draw.get-round "cal" 2))
     , "closes-at": (at 'closes-at (smartpacts.prize-draw.get-round "cal" 2))
@@ -2580,7 +2580,7 @@
 (begin-tx)
 (expect "FSCHED-0 the first ticket freezes S1 into the round and consumes the raffle's schedule"
   { "result": "bought 1 ticket(s) in fsched round 1", "state": "selling", "opens-at": (time "2026-09-16T00:00:00Z"), "next-opens-at": (time "1970-01-01T00:00:00Z") }
-  (let ((res (smartpacts.prize-draw.buy "fsched" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])))
+  (let ((res (smartpacts.prize-draw.buy "fsched" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "fsched")))))
     { "result": res, "state": (at 'state (smartpacts.prize-draw.get-round "fsched" 1))
     , "opens-at": (at 'opens-at (smartpacts.prize-draw.get-round "fsched" 1))
     , "next-opens-at": (at 'next-opens-at (smartpacts.prize-draw.get-raffle "fsched")) }))
@@ -2608,7 +2608,7 @@
 (env-events true)
 (expect "FSCHED-3 a later ticket JOINS round 1 on the FROZEN S1, not a new round on the raffle's newer S2"
   "bought 1 ticket(s) in fsched round 1"
-  (smartpacts.prize-draw.buy "fsched" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 []))
+  (smartpacts.prize-draw.buy "fsched" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "fsched"))))
 (expect "FSCHED-3b a join emits no ROUND-OPENED"
   []
   (let ((evs (env-events true)))
@@ -2630,7 +2630,7 @@
 (begin-tx)
 (expect "FSCHED-5 the next round's first ticket freezes S2 — the schedule set after round 1's first ticket reached exactly the round after it"
   { "result": "bought 1 ticket(s) in fsched round 2", "opens-at": (time "2026-09-21T00:00:00Z"), "closes-at": (time "2026-09-25T00:00:00Z"), "draws-at": (time "2026-09-25T12:00:00Z"), "next-opens-at": (time "1970-01-01T00:00:00Z") }
-  (let ((res (smartpacts.prize-draw.buy "fsched" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])))
+  (let ((res (smartpacts.prize-draw.buy "fsched" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "fsched")))))
     { "result": res
     , "opens-at": (at 'opens-at (smartpacts.prize-draw.get-round "fsched" 2))
     , "closes-at": (at 'closes-at (smartpacts.prize-draw.get-round "fsched" 2))
@@ -2652,38 +2652,38 @@
 (begin-tx)
 (expect-failure "TBUY-N1 one second before opens-at the buy is refused, and the message names the instant"
   "sales have not opened yet — they open at 2026-09-16T00:00:00Z"
-  (smartpacts.prize-draw.buy "tbuy" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "tbuy" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "tbuy"))))
 (rollback-tx)
 ;; the height is irrelevant: the same second, at the first block there is
 (env-chain-data { "block-height": 1 })
 (begin-tx)
 (expect-failure "TBUY-N1b the same second at height 1 is refused the same way"
   "sales have not opened yet — they open at 2026-09-16T00:00:00Z"
-  (smartpacts.prize-draw.buy "tbuy" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "tbuy" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "tbuy"))))
 (rollback-tx)
 (env-chain-data { "block-height": 3520002, "block-time": (time "2026-09-16T00:00:00Z") })
 (begin-tx)
 (expect "TBUY-1 at opens-at exactly the buy is accepted — it is the first, so it opens the round"
   "bought 1 ticket(s) in tbuy round 1"
-  (smartpacts.prize-draw.buy "tbuy" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "tbuy" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "tbuy"))))
 (commit-tx)
 (env-chain-data { "block-height": 3520000000, "block-time": (time "2026-09-20T05:59:59Z") })
 (begin-tx)
 (expect "TBUY-2 one second before closes-at it is still accepted — at a height a billion blocks on"
   "bought 1 ticket(s) in tbuy round 1"
-  (smartpacts.prize-draw.buy "tbuy" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "tbuy" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "tbuy"))))
 (commit-tx)
 (env-chain-data { "block-height": 3520003, "block-time": (time "2026-09-20T06:00:00Z") })
 (begin-tx)
 (expect-failure "TBUY-N2 at closes-at exactly it is refused: the round is no longer live, and nothing else is scheduled"
   "sales are closed for this round — the next round is not scheduled yet"
-  (smartpacts.prize-draw.buy "tbuy" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "tbuy" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "tbuy"))))
 (rollback-tx)
 (env-chain-data { "block-height": 1 })
 (begin-tx)
 (expect-failure "TBUY-N2b and at height 1 on that same second it is refused the same way"
   "sales are closed for this round — the next round is not scheduled yet"
-  (smartpacts.prize-draw.buy "tbuy" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "tbuy" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "tbuy"))))
 (rollback-tx)
 (env-sigs [])
 (begin-tx)
@@ -2703,7 +2703,7 @@
 (env-chain-data { "block-height": 3530001, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
             , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "odraw") 2.0) ] } ])
-(begin-tx)(smartpacts.prize-draw.buy "odraw" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [])(commit-tx)
+(begin-tx)(smartpacts.prize-draw.buy "odraw" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "odraw")))(commit-tx)
 (env-sigs [])
 
 ;; sales closed, one second before the draw instant
@@ -2777,7 +2777,7 @@
 (env-chain-data { "block-height": 3560001, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
             , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "prev") 1.0) ] } ])
-(begin-tx)(smartpacts.prize-draw.buy "prev" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])(commit-tx)
+(begin-tx)(smartpacts.prize-draw.buy "prev" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "prev")))(commit-tx)
 ;; the operator schedules round 2 while round 1 sells. It cannot open before
 ;; round 1 closes: every ticket until then joins round 1, so such a schedule
 ;; could never take a first ticket of its own.
@@ -2801,27 +2801,27 @@
 (begin-tx)
 (expect "TIME-PREV-N1 while the previous round still sells, a ticket JOINS it — the scheduled round 2 does not open"
   { "result": "bought 1 ticket(s) in prev round 1", "round-seq": 1 }
-  { "result": (smartpacts.prize-draw.buy "prev" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [])
+  { "result": (smartpacts.prize-draw.buy "prev" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "prev")))
   , "round-seq": (at 'round-seq (smartpacts.prize-draw.get-raffle "prev")) })
 (commit-tx)
 (env-chain-data { "block-height": 3560003, "block-time": (time "2026-09-20T05:59:59Z") })
 (begin-tx)
 (expect "TIME-PREV-N2 one second before its close instant, still round 1"
   { "result": "bought 1 ticket(s) in prev round 1", "round-seq": 1 }
-  { "result": (smartpacts.prize-draw.buy "prev" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [])
+  { "result": (smartpacts.prize-draw.buy "prev" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "prev")))
   , "round-seq": (at 'round-seq (smartpacts.prize-draw.get-raffle "prev")) })
 (commit-tx)
 (env-chain-data { "block-height": 3560004, "block-time": (time "2026-09-20T06:00:00Z") })
 (begin-tx)
 (expect-failure "TIME-PREV-1a at the previous round's close instant it no longer sells, and round 2 opens one second later — the ticket waits"
   "sales have not opened yet — they open at 2026-09-20T06:00:01Z"
-  (smartpacts.prize-draw.buy "prev" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 []))
+  (smartpacts.prize-draw.buy "prev" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "prev"))))
 (rollback-tx)
 (env-chain-data { "block-height": 3560005, "block-time": (time "2026-09-20T06:00:01Z") })
 (begin-tx)
 (expect "TIME-PREV-1 one second after the previous round's close — still undrawn — the next ticket opens round 2"
   "bought 1 ticket(s) in prev round 2"
-  (smartpacts.prize-draw.buy "prev" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 []))
+  (smartpacts.prize-draw.buy "prev" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "prev"))))
 (expect "TIME-PREV-1b round 1 is closed, still undrawn and still pinned to its own drand round, and round 2 is now the raffle's current round"
   { "r1-state": "selling", "r1-decide-height": 20797302, "r1-tickets": 3, "current": "prev|2" }
   { "r1-state": (at 'state (smartpacts.prize-draw.get-round "prev" 1))
@@ -2907,7 +2907,7 @@
 (env-events true)
 (expect "OPEN-1 the first ticket creates round 1 and pays the RE-TERMED price"
   "bought 2 ticket(s) in op round 1"
-  (smartpacts.prize-draw.buy "op" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 []))
+  (smartpacts.prize-draw.buy "op" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "op"))))
 (expect "OPEN-2 ROUND-OPENED is emitted BEFORE TICKETS-BOUGHT, and its params are in order: id seq opens-at closes-at draws-at price rake seed-in drand-round"
   { "order": ["smartpacts.prize-draw.ROUND-OPENED" "smartpacts.prize-draw.TICKETS-BOUGHT"]
   , "opened": [ ["op" 1 (time "2026-09-16T00:00:00Z") (time "2026-09-20T06:00:00Z") (time "2026-09-20T14:00:00Z") 3.0 0.20 30.0 20797302] ]
@@ -2953,7 +2953,7 @@
 (env-events true)
 (expect "OPEN-5 a later buy JOINS the round"
   "bought 1 ticket(s) in op round 1"
-  (smartpacts.prize-draw.buy "op" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 []))
+  (smartpacts.prize-draw.buy "op" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "op"))))
 (expect "OPEN-5b a join emits TICKETS-BOUGHT only, creates nothing and counts nothing"
   { "names": ["smartpacts.prize-draw.TICKETS-BOUGHT"], "round-seq": 1, "rounds-used": 1, "tickets": 3, "sales": 9.0, "pending": 9.0 }
   { "names": (filter (lambda (n:string) (!= n "coin.TRANSFER")) (map (at 'name) (env-events true)))
@@ -2987,7 +2987,7 @@
 (begin-tx)
 (expect "OPEN-7 and a later buyer still pays the round's frozen 3.0, not the raffle's newer 5.0"
   { "result": "bought 1 ticket(s) in op round 1", "sales": 12.0, "ok": true }
-  { "result": (smartpacts.prize-draw.buy "op" "k:ca40100000000000000000000000000000000000000000000000000000000003" 1 [])
+  { "result": (smartpacts.prize-draw.buy "op" "k:ca40100000000000000000000000000000000000000000000000000000000003" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "op")))
   , "sales": (at 'sales (smartpacts.prize-draw.get-round "op" 1))
   , "ok": (at 'ok (smartpacts.prize-draw.pool-status "op")) })
 (commit-tx)
@@ -3019,7 +3019,7 @@
 (begin-tx)
 (expect-failure "OPEN-N1 a retired raffle's first ticket is refused, schedule or no schedule"
   "this raffle is retired — no new rounds open"
-  (smartpacts.prize-draw.buy "opn-ret" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "opn-ret" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "opn-ret"))))
 (rollback-tx)
 (env-sigs [])
 
@@ -3029,7 +3029,7 @@
 (begin-tx)
 (expect-failure "OPEN-N3 a raffle that was never scheduled sells nothing, and says the operator must set when it sells — never drand's genesis error"
   "this raffle has no round scheduled — the operator sets when the next one sells"
-  (smartpacts.prize-draw.buy "opn-nos" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "opn-nos" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "opn-nos"))))
 (rollback-tx)
 ;; The control for the ordering OPEN-N3 pins: an unscheduled raffle's draws-at
 ;; is EPOCH, and pinning a drand round from it is exactly what drand refuses.
@@ -3052,13 +3052,13 @@
 (begin-tx)
 (expect-failure "OPEN-N5 one second before opens-at the first ticket is refused, and the message names the instant"
   "sales have not opened yet — they open at 2026-09-16T00:00:00Z"
-  (smartpacts.prize-draw.buy "opn-early" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "opn-early" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "opn-early"))))
 (rollback-tx)
 (env-chain-data { "block-height": 4001301, "block-time": (time "2026-09-16T00:00:00Z") })
 (begin-tx)
 (expect "OPEN-N5b at opens-at exactly the first ticket is accepted — it creates the round"
   "bought 1 ticket(s) in opn-early round 1"
-  (smartpacts.prize-draw.buy "opn-early" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "opn-early" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "opn-early"))))
 (commit-tx)
 (env-sigs [])
 (env-sigs [ { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
@@ -3066,7 +3066,7 @@
 (begin-tx)
 (expect "OPEN-N5c and in that same second a second ticket JOINS — opens-at exactly is accepted on the join path too"
   { "result": "bought 1 ticket(s) in opn-early round 1", "tickets": 2, "round-seq": 1 }
-  { "result": (smartpacts.prize-draw.buy "opn-early" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [])
+  { "result": (smartpacts.prize-draw.buy "opn-early" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "opn-early")))
   , "tickets": (at 'tickets (smartpacts.prize-draw.get-round "opn-early" 1))
   , "round-seq": (at 'round-seq (smartpacts.prize-draw.get-raffle "opn-early")) })
 (commit-tx)
@@ -3076,19 +3076,19 @@
 (env-chain-data { "block-height": 4001200, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
             , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "opn-prev") 1.0) ] } ])
-(begin-tx)(smartpacts.prize-draw.buy "opn-prev" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])(commit-tx)
+(begin-tx)(smartpacts.prize-draw.buy "opn-prev" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "opn-prev")))(commit-tx)
 (env-chain-data { "block-height": 4001201, "block-time": (time "2026-09-20T05:59:59Z") })
 (begin-tx)
 (expect "OPEN-N4b one second before closes-at a ticket still JOINS round 1"
   { "result": "bought 1 ticket(s) in opn-prev round 1", "tickets": 2 }
-  { "result": (smartpacts.prize-draw.buy "opn-prev" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])
+  { "result": (smartpacts.prize-draw.buy "opn-prev" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "opn-prev")))
   , "tickets": (at 'tickets (smartpacts.prize-draw.get-round "opn-prev" 1)) })
 (commit-tx)
 (env-chain-data { "block-height": 4001202, "block-time": (time "2026-09-20T06:00:00Z") })
 (begin-tx)
 (expect-failure "OPEN-N4 at closes-at exactly the round is not live: the ticket falls to the create path and is told the round is over and the next is unset"
   "sales are closed for this round — the next round is not scheduled yet"
-  (smartpacts.prize-draw.buy "opn-prev" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "opn-prev" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "opn-prev"))))
 (rollback-tx)
 (env-sigs [])
 
@@ -3096,7 +3096,7 @@
 (env-chain-data { "block-height": 4001100, "block-time": (time "2026-09-16T00:00:00Z") })
 (env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
             , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "opn-lim") 1.0) ] } ])
-(begin-tx)(smartpacts.prize-draw.buy "opn-lim" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])(commit-tx)
+(begin-tx)(smartpacts.prize-draw.buy "opn-lim" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "opn-lim")))(commit-tx)
 (env-sigs [])
 (env-chain-data { "block-height": 4001101, "block-time": (time "2026-09-20T06:00:00Z") })
 (env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
@@ -3108,7 +3108,7 @@
 (begin-tx)
 (expect-failure "OPEN-N2 with the limit spent, the first ticket of a second round is refused — even into a fresh, open schedule"
   "this raffle has run its last round"
-  (smartpacts.prize-draw.buy "opn-lim" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "opn-lim" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "opn-lim"))))
 (rollback-tx)
 (env-sigs [])
 
@@ -3130,19 +3130,19 @@
 (begin-tx)
 (expect "OPEN-N6b one second before the scheduled close, a first ticket still opens the round (rolled back)"
   "bought 1 ticket(s) in expire round 1"
-  (smartpacts.prize-draw.buy "expire" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "expire" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "expire"))))
 (rollback-tx)
 (env-chain-data { "block-height": 4003002, "block-time": (time "2026-09-20T06:00:00Z") })
 (begin-tx)
 (expect-failure "OPEN-N6 at the scheduled close exactly, with no ticket sold, the schedule has expired"
   "the scheduled round closed at 2026-09-20T06:00:00Z with no ticket sold — the operator must schedule again"
-  (smartpacts.prize-draw.buy "expire" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "expire" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "expire"))))
 (rollback-tx)
 (env-chain-data { "block-height": 4003003, "block-time": (time "2026-12-01T00:00:00Z") })
 (begin-tx)
 (expect-failure "EXPIRE-N1 and it stays expired, naming the same instant, however long after"
   "the scheduled round closed at 2026-09-20T06:00:00Z with no ticket sold — the operator must schedule again"
-  (smartpacts.prize-draw.buy "expire" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "expire" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "expire"))))
 (rollback-tx)
 (env-sigs [])
 (begin-tx)
@@ -3178,7 +3178,7 @@
 (begin-tx)
 (expect "EXPIRE-3 the first ticket into the new schedule creates ROUND 1 — the expired schedule never was one — and binds the waiting bonus"
   { "result": "bought 1 ticket(s) in expire round 1", "seq": 1, "opens-at": (time "2026-12-02T00:00:00Z"), "seed-in": 5.0, "rounds-used": 1, "seed-bucket": 0.0, "bound": 5.0 }
-  (let ((res (smartpacts.prize-draw.buy "expire" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])))
+  (let ((res (smartpacts.prize-draw.buy "expire" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "expire")))))
     { "result": res
     , "seq": (at 'seq (smartpacts.prize-draw.get-round "expire" 1))
     , "opens-at": (at 'opens-at (smartpacts.prize-draw.get-round "expire" 1))
@@ -3218,10 +3218,10 @@
                       , (coin.TRANSFER "k:7e57000000000000000000000000000000000000000000000000000000000071" (smartpacts.prize-draw.pool-account "b2r") 20.0)
                       , (coin.TRANSFER "k:7e57000000000000000000000000000000000000000000000000000000000071" (smartpacts.prize-draw.pool-account "b23") 20.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "b2w" "k:7e57000000000000000000000000000000000000000000000000000000000071" 1 [])
-(smartpacts.prize-draw.buy "b2z" "k:7e57000000000000000000000000000000000000000000000000000000000071" 1 [])
-(smartpacts.prize-draw.buy "b2r" "k:7e57000000000000000000000000000000000000000000000000000000000071" 1 [])
-(smartpacts.prize-draw.buy "b23" "k:7e57000000000000000000000000000000000000000000000000000000000071" 1 [])
+(smartpacts.prize-draw.buy "b2w" "k:7e57000000000000000000000000000000000000000000000000000000000071" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "b2w")))
+(smartpacts.prize-draw.buy "b2z" "k:7e57000000000000000000000000000000000000000000000000000000000071" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "b2z")))
+(smartpacts.prize-draw.buy "b2r" "k:7e57000000000000000000000000000000000000000000000000000000000071" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "b2r")))
+(smartpacts.prize-draw.buy "b23" "k:7e57000000000000000000000000000000000000000000000000000000000071" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "b23")))
 (commit-tx)
 (env-sigs [])
 (begin-tx)
@@ -3361,8 +3361,8 @@
           , { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
             , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "dnow") 1.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "dnow" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [])
-(smartpacts.prize-draw.buy "dnow" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [])
+(smartpacts.prize-draw.buy "dnow" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "dnow")))
+(smartpacts.prize-draw.buy "dnow" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "dnow")))
 (commit-tx)
 (env-sigs [])
 ;; one second before drand publishes round 20797302
@@ -3456,9 +3456,9 @@
           , { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
             , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "esc-b") 2.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "esc-a" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 3 [])
-(smartpacts.prize-draw.buy "esc-b" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [])
-(smartpacts.prize-draw.buy "esc-b" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 2 [])
+(smartpacts.prize-draw.buy "esc-a" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "esc-a")))
+(smartpacts.prize-draw.buy "esc-b" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "esc-b")))
+(smartpacts.prize-draw.buy "esc-b" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "esc-b")))
 (commit-tx)
 (env-sigs [])
 
@@ -3585,8 +3585,8 @@
             , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "lim1") 1.0)
                       , (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "lim3") 1.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "lim1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])
-(smartpacts.prize-draw.buy "lim3" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])
+(smartpacts.prize-draw.buy "lim1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "lim1")))
+(smartpacts.prize-draw.buy "lim3" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "lim3")))
 (expect "LIMIT2-0 the first ticket used the one round the limit allows"
   { "rounds-used": 1, "rounds-limit": 1, "active": true }
   (let ((g (smartpacts.prize-draw.get-raffle "lim1"))) { "rounds-used": (at 'rounds-used g), "rounds-limit": (at 'rounds-limit g), "active": (at 'active g) }))
@@ -3607,7 +3607,7 @@
 (begin-tx)
 (expect-failure "LIMIT2-N1 the first ticket of a second round is refused: the raffle has run its last round"
   "this raffle has run its last round"
-  (smartpacts.prize-draw.buy "lim1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "lim1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "lim1"))))
 (rollback-tx)
 (env-sigs [])
 ;; the last round draws, and the draw retires the raffle: bucket 0, bound 0
@@ -3625,7 +3625,7 @@
 (begin-tx)
 (expect-failure "LIMIT2-N2 retired, the message changes: it is the retirement that refuses the ticket now, not the limit"
   "this raffle is retired — no new rounds open"
-  (smartpacts.prize-draw.buy "lim1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "lim1" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "lim1"))))
 (rollback-tx)
 (env-sigs [])
 (env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] }
@@ -3655,7 +3655,7 @@
 (begin-tx)
 (expect-failure "LIMIT2-E-N1 and it sells nothing afterwards"
   "this raffle is retired — no new rounds open"
-  (smartpacts.prize-draw.buy "lim3" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "lim3" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "lim3"))))
 (rollback-tx)
 (env-sigs [])
 (begin-tx)
@@ -3692,8 +3692,8 @@
             , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "lim2") 1.0)
                       , (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "lim4") 1.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "lim2" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])
-(smartpacts.prize-draw.buy "lim4" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [])
+(smartpacts.prize-draw.buy "lim2" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "lim2")))
+(smartpacts.prize-draw.buy "lim4" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "lim4")))
 (commit-tx)
 (env-sigs [])
 ;; round 1 closes; a second bonus, a second schedule, a second round binding it
@@ -3714,8 +3714,8 @@
             , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "lim2") 1.0)
                       , (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "lim4") 1.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "lim2" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [])
-(smartpacts.prize-draw.buy "lim4" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [])
+(smartpacts.prize-draw.buy "lim2" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "lim2")))
+(smartpacts.prize-draw.buy "lim4" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "lim4")))
 (commit-tx)
 (env-sigs [])
 (env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
@@ -3746,7 +3746,7 @@
 (begin-tx)
 (expect-failure "LIMIT2-F11-N1 left active for the bonus's sake, the raffle still opens no third round"
   "this raffle has run its last round"
-  (smartpacts.prize-draw.buy "lim2" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 []))
+  (smartpacts.prize-draw.buy "lim2" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "lim2"))))
 (rollback-tx)
 (env-sigs [])
 ;; round 2 draws: its bonus is paid out, nothing is bound, and NOW it retires
@@ -3813,8 +3813,8 @@
           , { "key": "b0b0000000000000000000000000000000000000000000000000000000000002"
             , "caps": [ (coin.TRANSFER "k:b0b0000000000000000000000000000000000000000000000000000000000002" (smartpacts.prize-draw.pool-account "forge") 1.0) ] } ])
 (begin-tx)
-(smartpacts.prize-draw.buy "forge" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [])
-(smartpacts.prize-draw.buy "forge" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [])
+(smartpacts.prize-draw.buy "forge" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 2 [] (at 'expect (smartpacts.prize-draw.ticket-terms "forge")))
+(smartpacts.prize-draw.buy "forge" "k:b0b0000000000000000000000000000000000000000000000000000000000002" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "forge")))
 (commit-tx)
 (env-sigs [])
 
@@ -3982,5 +3982,214 @@
   , "drawn-zero-fee": (at 'state (smartpacts.prize-draw.get-round "wta" 1))
   , "still-selling": (at 'state (smartpacts.prize-draw.get-round "op" 1)) })
 (commit-tx)
+
+;; ---------------------------------------------------------------------------
+;; EXPECT — a ticket purchase states the round and the terms it was signed for.
+;; `buy` names a raffle, and the chain decides which round the ticket lands in;
+;; `expect` is the digest of the round its buyer read, and any other round or any
+;; other terms abort the purchase before anything is paid or written.
+;; ---------------------------------------------------------------------------
+(env-chain-data { "block-time": (time "2026-11-01T00:00:00Z") })
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.create-raffle "exp" 1.0 0.05 [0.5 0.3 0.2] 0 false 0.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.schedule-round "exp" (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))
+(expect "EXPECT-0 before sales open, ticket-terms shows the round the first ticket would create, not yet on sale"
+  { "seq": 1, "price": 1.0, "rake": 0.05, "tiers": [0.5 0.3 0.2], "numbered": false
+  , "max-tickets": 0, "max-fund": 200.0, "bounty-share": 0.20
+  , "opens-at": (time "2026-11-02T00:00:00Z"), "closes-at": (time "2026-11-03T00:00:00Z"), "draws-at": (time "2026-11-03T06:00:00Z")
+  , "on-sale": false
+  , "expect": (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z")) }
+  (smartpacts.prize-draw.ticket-terms "exp"))
+(commit-tx)
+(env-sigs [])
+
+(env-chain-data { "block-time": (time "2026-11-02T12:00:00Z") })
+(env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "exp") 1.0) ] } ])
+(begin-tx)
+(expect "EXPECT-0b once the chain's clock is inside the window it is on sale, with the same digest"
+  { "on-sale": true, "expect": (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z")) }
+  (let ((q (smartpacts.prize-draw.ticket-terms "exp"))) { "on-sale": (at 'on-sale q), "expect": (at 'expect q) }))
+(expect-failure "EXPECT-N1 an empty digest is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] ""))
+(expect-failure "EXPECT-N2 a digest stating another round number is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 2 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))))
+(expect-failure "EXPECT-N3 a digest stating another price is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 0.5 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))))
+(expect-failure "EXPECT-N4 a digest stating another fee is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.06 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))))
+(expect-failure "EXPECT-N5 a digest stating another prize split is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [1.0] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))))
+(expect-failure "EXPECT-N6 a digest stating a numbered game is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] true 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))))
+(expect-failure "EXPECT-N7 a digest stating another ticket supply is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 100 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))))
+(expect-failure "EXPECT-N8 a digest stating another prize ceiling is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 201.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))))
+(expect-failure "EXPECT-N9 a digest stating another crank share is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.21 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))))
+(expect-failure "EXPECT-N10 a digest stating another sales instant is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:01Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))))
+(expect-failure "EXPECT-N11 a digest stating another closing instant is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:01Z") (time "2026-11-03T06:00:00Z"))))
+(expect-failure "EXPECT-N12 a digest stating another draw instant is refused"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:01Z"))))
+(expect "EXPECT-1 every refused purchase wrote nothing and paid nothing: no round, no ticket, no pool"
+  { "round-seq": 0, "current": "", "pending": 0.0 }
+  (let ((g (smartpacts.prize-draw.get-raffle "exp")))
+    { "round-seq": (at 'round-seq g), "current": (at 'current g), "pending": (at 'pending g) }))
+(expect "EXPECT-2 the digest of the terms the buyer read buys the first ticket"
+  "bought 1 ticket(s) in exp round 1"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))))
+(expect "EXPECT-2b and the round froze exactly those: the digest of its own row is the one that was stated"
+  (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))
+  (let ((r (smartpacts.prize-draw.get-round "exp" 1)))
+    (smartpacts.prize-draw.terms-digest (at 'seq r) (at 'price r) (at 'rake r) (at 'tiers r) (at 'numbered r)
+      (at 'max-tickets r) (at 'max-fund r) (at 'bounty-share r) (at 'opens-at r) (at 'closes-at r) (at 'draws-at r))))
+(commit-tx)
+
+;; the operator re-terms the raffle for FUTURE rounds and schedules the next one; the live
+;; round's digest does not move, and a later ticket joins it with the same one
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.set-terms "exp" 5.0 0.50 [1.0] 0 0.0 0 200.0 1.0 [1 1])
+(smartpacts.prize-draw.schedule-round "exp" (time "2026-11-04T00:00:00Z") (time "2026-11-05T00:00:00Z") (time "2026-11-05T06:00:00Z"))
+(commit-tx)
+(env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "exp") 1.0) ] } ])
+(begin-tx)
+(expect "EXPECT-3 while the round sells, ticket-terms is the LIVE round's, untouched by a re-term and a new schedule"
+  { "seq": 1, "on-sale": true, "expect": (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z")) }
+  (let ((q (smartpacts.prize-draw.ticket-terms "exp"))) { "seq": (at 'seq q), "on-sale": (at 'on-sale q), "expect": (at 'expect q) }))
+(expect-failure "EXPECT-N13 a digest of the raffle's NEW terms does not buy into the live round"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 2 5.0 0.50 [1.0] false 0 200.0 1.0 (time "2026-11-04T00:00:00Z") (time "2026-11-05T00:00:00Z") (time "2026-11-05T06:00:00Z"))))
+(expect "EXPECT-4 a later ticket joins the live round with the same digest"
+  "bought 1 ticket(s) in exp round 1"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))))
+(commit-tx)
+
+;; after the live round closes and the next window opens, round 1's digest no longer buys
+(env-chain-data { "block-time": (time "2026-11-04T12:00:00Z") })
+(env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "exp") 5.0) ] } ])
+(begin-tx)
+(expect-failure "EXPECT-N14 a purchase signed for round 1 and mined once round 2 is on sale is refused, not turned into round 2's first ticket"
+  "this is not the round, or not the terms, this ticket was signed for — read the game again"
+  (smartpacts.prize-draw.buy "exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.3 0.2] false 0 200.0 0.20 (time "2026-11-02T00:00:00Z") (time "2026-11-03T00:00:00Z") (time "2026-11-03T06:00:00Z"))))
+(expect "EXPECT-5 and ticket-terms now shows round 2 on the raffle's new terms"
+  { "seq": 2, "price": 5.0, "rake": 0.50, "on-sale": true }
+  (let ((q (smartpacts.prize-draw.ticket-terms "exp"))) { "seq": (at 'seq q), "price": (at 'price q), "rake": (at 'rake q), "on-sale": (at 'on-sale q) }))
+(commit-tx)
+(env-sigs [])
+
+;; EXPECT, continued — the digest's definition is pinned to a constant, equal amounts have one
+;; digest however they were typed, and `on-sale` is true exactly when the chain's clock, the
+;; raffle's `active` flag and its rounds-limit would let a correctly stated purchase through.
+(begin-tx)
+(expect "EXPECT-GOLD the digest of one fixed round is this constant, the same in the REPL and on a mainnet node — a change to what the digest covers, or to its order, moves it"
+  "6GrlP5iqn6OY_q-BDXOCasnOD0bpsbk5AS1WKkI2GU4"
+  (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5
+    (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z")))
+(expect "EXPECT-SUBSEC an instant moved inside its own second, on a whole millisecond, changes the digest — a time hashed as a time would not see it"
+  [true true true true]
+  [ (!= (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5 (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z")) (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5 (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (add-time (time "2026-09-20T17:40:00Z") 0.999)))
+    (!= (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5 (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z")) (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5 (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (add-time (time "2026-09-20T17:40:00Z") 0.5)))
+    (!= (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5 (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z")) (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5 (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (add-time (time "2026-09-20T17:40:00Z") 0.001)))
+    (!= (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5 (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z")) (smartpacts.prize-draw.terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5 (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (add-time (time "2026-09-20T17:40:00Z") 0.000001))) ])
+(expect "EXPECT-DEC equal amounts typed with other trailing zeros, at sizes a hash would otherwise tell apart, have one digest"
+  (smartpacts.prize-draw.terms-digest 1 100000.0 0.05 [0.5 0.5] false 0 100000.0 0.5
+    (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z"))
+  (smartpacts.prize-draw.terms-digest 1 100000.000000000000 0.050 [0.5 0.5] false 0 100000.000000000000 0.5000
+    (time "2026-09-20T17:10:00Z") (time "2026-09-20T17:30:00Z") (time "2026-09-20T17:40:00Z")))
+(commit-tx)
+
+(env-chain-data { "block-time": (time "2026-12-01T00:00:00Z") })
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.create-raffle "os-exp"  1.0 0.05 [1.0] 0 false 0.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.create-raffle "os-ret"  1.0 0.05 [1.0] 0 false 0.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.create-raffle "os-lim"  1.0 0.05 [1.0] 0 false 0.0 1 200.0 0.20 [1 1])
+(smartpacts.prize-draw.create-raffle "os-live" 1.0 0.05 [1.0] 1 false 0.0 0 200.0 0.20 [1 1])
+(smartpacts.prize-draw.schedule-round "os-exp"  (time "2026-12-02T00:00:00Z") (time "2026-12-03T00:00:00Z") (time "2026-12-03T06:00:00Z"))
+(smartpacts.prize-draw.schedule-round "os-ret"  (time "2026-12-02T00:00:00Z") (time "2026-12-04T00:00:00Z") (time "2026-12-04T06:00:00Z"))
+(smartpacts.prize-draw.schedule-round "os-lim"  (time "2026-12-02T00:00:00Z") (time "2026-12-03T00:00:00Z") (time "2026-12-03T06:00:00Z"))
+(smartpacts.prize-draw.schedule-round "os-live" (time "2026-12-02T00:00:00Z") (time "2026-12-04T00:00:00Z") (time "2026-12-04T06:00:00Z"))
+(commit-tx)
+;; os-lim sells its one allowed round; os-live sells its whole supply of one ticket
+(env-chain-data { "block-time": (time "2026-12-02T12:00:00Z") })
+(env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "os-lim") 1.0)
+                      , (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "os-live") 1.0) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.buy "os-lim" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "os-lim")))
+(smartpacts.prize-draw.buy "os-live" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "os-live")))
+(commit-tx)
+(env-sigs [ { "key": "09b0f41a2f2b3b9f0c8ab6a1e0c1a4d1b1f0e2c3a4958677a5b4c3d2e1f00987", "caps": [ (smartpacts.prize-draw.OPERATOR) ] } ])
+(begin-tx)
+(smartpacts.prize-draw.retire-raffle "os-ret")
+(commit-tx)
+;; os-lim's round has closed; a second window is scheduled over its spent limit
+(env-chain-data { "block-time": (time "2026-12-03T00:00:00Z") })
+(begin-tx)
+(smartpacts.prize-draw.schedule-round "os-lim" (time "2026-12-03T06:00:00Z") (time "2026-12-05T00:00:00Z") (time "2026-12-05T06:00:00Z"))
+(commit-tx)
+(env-chain-data { "block-time": (time "2026-12-03T12:00:00Z") })
+(env-sigs [ { "key": "a11ce00000000000000000000000000000000000000000000000000000000001"
+            , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "os-exp") 1.0)
+                      , (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "os-ret") 1.0)
+                      , (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "os-lim") 1.0)
+                      , (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" (smartpacts.prize-draw.pool-account "os-live") 1.0) ] } ])
+(begin-tx)
+(expect "ONSALE-1 a window that closed with no ticket sold is not on sale"
+  false (at 'on-sale (smartpacts.prize-draw.ticket-terms "os-exp")))
+(expect-failure "ONSALE-1b and a purchase stating its digest is refused for that reason"
+  "with no ticket sold"
+  (smartpacts.prize-draw.buy "os-exp" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "os-exp"))))
+(expect "ONSALE-2 a retired raffle whose window is open is not on sale"
+  false (at 'on-sale (smartpacts.prize-draw.ticket-terms "os-ret")))
+(expect-failure "ONSALE-2b and a purchase stating its digest is refused for that reason"
+  "this raffle is retired — no new rounds open"
+  (smartpacts.prize-draw.buy "os-ret" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "os-ret"))))
+(expect "ONSALE-3 a raffle whose rounds-limit is spent is not on sale although a window is open"
+  { "on-sale": false, "seq": 2 }
+  (let ((q (smartpacts.prize-draw.ticket-terms "os-lim"))) { "on-sale": (at 'on-sale q), "seq": (at 'seq q) }))
+(expect-failure "ONSALE-3b and a purchase stating its digest is refused for that reason"
+  "this raffle has run its last round"
+  (smartpacts.prize-draw.buy "os-lim" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "os-lim"))))
+(expect "ONSALE-4 a live round that is sold out is still on sale by the clock: on-sale does not count tickets"
+  { "on-sale": true, "seq": 1 }
+  (let ((q (smartpacts.prize-draw.ticket-terms "os-live"))) { "on-sale": (at 'on-sale q), "seq": (at 'seq q) }))
+(expect-failure "ONSALE-4b and the purchase is refused for the supply, not for its digest"
+  "not enough tickets left in this raffle"
+  (smartpacts.prize-draw.buy "os-live" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 1 [] (at 'expect (smartpacts.prize-draw.ticket-terms "os-live"))))
+(commit-tx)
+;; at a live round's closing instant exactly, the round is no longer the one a ticket lands in
+(env-chain-data { "block-time": (time "2026-12-04T00:00:00Z") })
+(begin-tx)
+(expect "ONSALE-5 at a live round's closing instant it is no longer on sale, and ticket-terms names the NEXT round"
+  { "on-sale": false, "seq": 2 }
+  (let ((q (smartpacts.prize-draw.ticket-terms "os-live"))) { "on-sale": (at 'on-sale q), "seq": (at 'seq q) }))
+(commit-tx)
+(env-chain-data { "block-time": (add-time (time "2026-12-04T00:00:00Z") -0.000001) })
+(begin-tx)
+(expect "ONSALE-5c one microsecond before the close the live round is still the one on sale"
+  { "on-sale": true, "seq": 1 }
+  (let ((q (smartpacts.prize-draw.ticket-terms "os-live"))) { "on-sale": (at 'on-sale q), "seq": (at 'seq q) }))
+(commit-tx)
+(env-sigs [])
 
 (print "prize-draw unit suite complete")

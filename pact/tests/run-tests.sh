@@ -77,7 +77,8 @@ echo
 echo "== suites"
 for f in prize-draw-unit-testing.repl prize-draw-vision-testing.repl \
          prize-draw-worstcase-testing.repl prize-draw-revenue-testing.repl \
-         prize-draw-frozen-testing.repl prize-draw-upgrade-testing.repl; do
+         prize-draw-frozen-testing.repl prize-draw-upgrade-testing.repl \
+         prize-draw-upgrade2-testing.repl; do
   "$PACT" -t "$f" > "/tmp/$f.out" 2>&1
   rc=$?
   n=$(grep -c 'Expect' "/tmp/$f.out" 2>/dev/null || echo 0)

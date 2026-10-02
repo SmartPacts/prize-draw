@@ -322,7 +322,7 @@
             , "caps": [ (coin.TRANSFER "k:a11ce00000000000000000000000000000000000000000000000000000000001" "m:smartpacts.prize-draw:after" 3.0) ] } ])
 (env-chain-data { "block-height": 420, "block-time": (time "2026-09-20T17:15:00Z") })
 (begin-tx)
-(smartpacts.prize-draw.buy "after" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 3 [])
+(smartpacts.prize-draw.buy "after" "k:a11ce00000000000000000000000000000000000000000000000000000000001" 3 [] (at 'expect (smartpacts.prize-draw.ticket-terms "after")))
 (expect "NEW-1 a round opened after the upgrade pins a DRAND ROUND in decide-height"
   { "decide-height": (smartpacts.prize-draw.drand-round-for (time "2026-09-20T17:40:00Z")), "deciding-block": -1 }
   (let ((r (smartpacts.prize-draw.get-round "after" 1)))
