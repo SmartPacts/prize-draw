@@ -62,6 +62,9 @@ dates the house sets. Starting a new raffle is a transaction, not a new contract
 - ✅ **Let anyone choose the winner** — the house, a player or a miner. *What the draw depends on*
   below says what it does rely on.
 - ✅ **Change a round's settings once its first ticket is sold.** A change reaches the next round.
+- ✅ **Put a ticket in a round, or on settings or dates, other than the ones its buyer read.** Each
+  purchase states them, and one that would land anywhere else is refused: no ticket is bought
+  and only the network fee is paid.
 - ✅ **Take a fee from a refund.**
 - ✅ **Move a pot's money with the operator key.**
 - 🟡 **Give a bonus back to the house.** Once added, a bonus belongs to a round's prize or to that
@@ -247,7 +250,7 @@ The contract refuses settings it could never honour:
 
 | | What it takes | What it does |
 |---|---|---|
-| 🔵 `buy` | A raffle, your account, how many tickets, and — in a numbered raffle — the numbers you pick | Pays for the tickets from your account into the raffle's pot. The first ticket after selling opens creates the round. |
+| 🔵 `buy` | A raffle, your account, how many tickets, the numbers you pick in a numbered raffle, and the fingerprint of the round you read | Pays for the tickets from your account into the raffle's pot. The first ticket after selling opens creates the round. Refused, with nothing paid, if the ticket would land in another round or on other settings or dates than the fingerprint states. |
 | 🟢 `get-holding` | A raffle, a round, an account | How many tickets that account holds in that round, and whether its refund was paid. |
 | 🟢 `get-ticket` | A raffle, a round, a ticket's place in line | Who holds that ticket, and the number picked, if any. |
 | 🟢 `get-number` | A raffle, a round, a picked number | Which ticket holds that number. |
@@ -309,6 +312,7 @@ are listed so this page accounts for every function in the contract, with nothin
 | `validate-payer` | Refuses any account whose name starts with `m:` wherever a caller names an account for money — every pot's name does. It reads the name only. |
 | `validate-id` | Refuses a raffle name that is empty, longer than 32 characters, holds a space, a tab, a line break or a similar invisible character, uses a character the records rely on, or could not be a pot's account name. A few rarer invisible characters, such as a non-breaking space, are still accepted. |
 | `validate-terms` | Every limit a raffle's settings must meet, in one place, so creating and changing a raffle can never check different things. |
+| `ticket-terms` · `terms-digest` | The round a ticket bought now would land in — its number, settings and dates — and the fingerprint of those that a purchase must state. |
 | `drand-round-for` | Which drand number a round drawing at a given moment is decided by: the one published about 3 minutes later. |
 | `round-seed` | Checks a drand number against drand's public key and turns it, with the round's key, into the number the winners are drawn from. Anyone can recompute it. |
 | `draw-ranks` · `draw-candidate` · `lift` | Draw the winning tickets from that number — distinct tickets, all of them sold, recomputable by anyone. |

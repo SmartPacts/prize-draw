@@ -15,9 +15,8 @@ chain is the `(module …)` form of the file in `pact/modules/`, verbatim, comme
 is no stripped "deploy variant" to reconcile. What this check does not cover: the lines before and
 after that form — the header, the `namespace` line, a load-time admin check and the table-creation
 footer — ran once, in the transaction that deployed it, and none of that is stored. The transaction
-that put the current code on chain (the upgrade, block 7274939, §5) carries that code, preceded by
-one extra form that refused to run while any round was unsettled; anyone can read it from the
-block's payload.
+that put the current code on chain (the second upgrade, block 7279034, §5) carries that code and
+nothing else; anyone can read it from the block's payload.
 
 Two commands. Read both scripts first — they are short, and they only make a read-only `/local`
 request. Pass any node URL you trust as an argument; the default is a public community node.
@@ -27,17 +26,18 @@ python3 .github/scripts/fetch-onchain.py > /tmp/onchain.pact
 python3 .github/scripts/compare-onchain.py /tmp/onchain.pact
 ```
 
-Expected output, measured 2026-09-30 after the upgrade:
+Expected output, measured 2026-10-02 after the second upgrade:
 
 ```
-VERBATIM: the 65450 characters the chain runs appear exactly, in order, in
-          pact/modules/prize-draw.pact, from character 7632.
-          Outside them: 7632 characters before the (module …) form (header comments, the
+VERBATIM: the 71362 characters the chain runs appear exactly, in order, in
+          pact/modules/prize-draw.pact, from character 7773.
+          Outside them: 7773 characters before the (module …) form (header comments, the
           namespace line and a load-time admin check) and 235 after it (the
           create-table footer). Those ran once in the deploy transaction; they are not stored.
 ```
 
-(Measured 2026-09-19 on the previous version: 69761 characters from character 7241.)
+(Measured on the earlier versions: 69761 characters from character 7241 on 2026-09-19; 65450 from
+character 7632 on 2026-09-30.)
 
 **Why it is two scripts and not a `curl`.** A Pact command carries its own hash, the node checks
 that hash against the exact command *bytes*, and re-serialising the JSON changes those bytes — so
@@ -58,8 +58,9 @@ locally will **never** equal the hash mainnet reports, and a mismatch tells you 
 code.
 
 We learned this the expensive way — on deploy day, against a value we had carried in our own
-documents for weeks. The hash on chain is `ROPuVZ3uzJ2LOLdW-18obFpmmg7XehIV_sQ5H7Taw-s` since the
-upgrade of 2026-09-30 (it was `r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI` before); compare it with
+documents for weeks. The hash on chain is `iOQQPMLIE-2igYcP1AX3qWqVeNImhjVRi4s33CVPiEU` since the
+upgrade of 2026-10-02 (it was `ROPuVZ3uzJ2LOLdW-18obFpmmg7XehIV_sQ5H7Taw-s` from 2026-09-30 and
+`r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI` before that); compare it with
 what `describe-module` reports if you like, but the check in §1 is the one that means something.
 
 To read it from the chain, change `'code` to `'hash` in `fetch-onchain.py`.
@@ -108,14 +109,21 @@ mainnet01 chain 2 (for example with `/local` or Chainweaver).
 | deploy the module | 7240922 | `5Bc0-gs7RFx-HBuIIVXVAZZ_05OWsNe1XhixZm8Dd1s` | 60,992 |
 | `initialize` — names where fees go, once | 7240942 | `TP8zVpAtVFRwtbz0kvz_j2TafiL_JIVAKaXOeAX71H4` | 225 |
 | **upgrade in place** — the draw is decided by a drand beacon instead of a block hash; no table or field changed | 7274939 | `qJ_h9Bl4iYHrTk_2PVc37a-Ua82e4lu11pOswqzwZfg` | 101,271 |
+| **second upgrade in place** — a ticket purchase states the round and the terms it was signed for, and is refused on any other; no table or field changed | 7279034 | `73n0HFjarozPhK6TMrtYTZyJHZ8SUoYTshBtMumNSdQ` | 66,289 |
 
-All three were signed by **two of the three admin keys**, as the admin keyset requires, plus a
-separate key that only pays gas. The upgrade transaction's first form read every game and refused
+All four were signed by **two of the three admin keys**, as the admin keyset requires, plus a
+separate key that only pays gas. The first upgrade transaction's first form read every game and refused
 to proceed if any round was still waiting for its draw (none was: both games were drawn and
 retired), so no round opened under the old rules could be settled under the new ones. After it
 landed, the code on chain was compared with the transaction's own module form and with this
 repository's file, the two earlier rounds were read back unchanged, and `describe-module`'s
 `tx_hash` was `qJ_h9Bl4iYHrTk_2PVc37a-Ua82e4lu11pOswqzwZfg`.
+
+The second upgrade carried the module alone: it changes no stored field and no settlement, so a
+round selling or scheduled when it landed would have been unaffected (none was). The same checks
+were repeated after it landed — code equal to the transaction's module form and to this file, the
+two earlier rounds unchanged, `tx_hash` `73n0HFjarozPhK6TMrtYTZyJHZ8SUoYTshBtMumNSdQ` — plus one more:
+`terms-digest` returned the constant the test suite pins (`EXPECT-GOLD`).
 
 **The keys.** Two keysets govern the module, over the same three public keys:
 

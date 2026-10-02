@@ -6,14 +6,15 @@ the same things in plain language.
 
 **How to read it.** Every property names the tests that fail if it is violated — the labels are
 the first argument of `expect` / `expect-failure` / `expect-that` in
-[`pact/tests/`](../pact/tests/), and `pact/tests/run-tests.sh` runs all six suites. A statement
+[`pact/tests/`](../pact/tests/), and `pact/tests/run-tests.sh` runs all seven suites. A statement
 with no named test is marked as a claim. Functions are cited by name rather than line number, because names do not drift. Where the
 words here and the code differ, the code is right — and please [tell us](../SECURITY.md).
 
 Deployed identity: namespace `n_48867b242317a0216a67f8c7ca26696b5878e0e3`, module `prize-draw`,
-chain 2, module hash `ROPuVZ3uzJ2LOLdW-18obFpmmg7XehIV_sQ5H7Taw-s` since the upgrade in place of
-2026-09-30 (block 7274939, request key `qJ_h9Bl4iYHrTk_2PVc37a-Ua82e4lu11pOswqzwZfg`); before it the
-hash was `r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI`. The hash excludes comments;
+chain 2, module hash `iOQQPMLIE-2igYcP1AX3qWqVeNImhjVRi4s33CVPiEU` since the second upgrade in place, of
+2026-10-02 (block 7279034, request key `73n0HFjarozPhK6TMrtYTZyJHZ8SUoYTshBtMumNSdQ`). Before it:
+`ROPuVZ3uzJ2LOLdW-18obFpmmg7XehIV_sQ5H7Taw-s` from the first upgrade of 2026-09-30 (block 7274939,
+request key `qJ_h9Bl4iYHrTk_2PVc37a-Ua82e4lu11pOswqzwZfg`), and `r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI`. The hash excludes comments;
 [VERIFY.md](../VERIFY.md) checks the stored `(module …)` form byte for byte. The module imports one
 other contract, the beacon verifier `n_48867b242317a0216a67f8c7ca26696b5878e0e3.drand`, by its full
 name and pinned to its code hash `Y07t-duJmkXkcGth0TfBRg3ThbNR-uh9PdNUd1MKHBQ`; its source is
@@ -66,7 +67,8 @@ Roles and authority:
 - **Buyers** — any account whose name does not start with `m:`. The first buyer of a round creates
   it and chooses nothing: the round's terms, instants and drand round are the game's as they stand.
   Pinned by unit `OPEN-*`, `BUY-N7`.
-- **Anyone** — `draw`, `preview`, `draw-status`, `decidable`, `escape`, `claim-escape`. The sender
+- **Anyone** — `draw`, `preview`, `draw-status`, `decidable`, `ticket-terms`, `escape`,
+  `claim-escape`. The sender
   signs only for gas; every payout inside is installed by the contract for amounts it derives from
   stored rows. Pinned by unit `BEACON-3`, `ESCAPE-2`, vision `VISION-INFLUENCE-2d`.
 
@@ -140,6 +142,25 @@ close); and a next round may not open before the round now selling closes. The c
    money plus the bound bonus) never above the round's `max-fund`; numbered picks range-checked and
    unique per round. Pinned by unit `OPEN-*`, `OPEN-N*`, `EXPIRE-*`, `TBUY-*`, `BUY-*`, `CEIL-*`,
    `RIFA-*`, `NUMBER-UNIQUE-PER-ROUND`, `FUND-CAP-*`, `FSCHED-*`.
+
+   **Every purchase states the round it was signed for.** `buy id account count picks expect`
+   takes `expect`, which must equal `terms-digest` of the round the ticket lands in: a hash over
+   the round's number and the ten values a round freezes for its buyers — price, fee, tiers,
+   numbered, supply, prize ceiling, crank share (the four amounts floored to 12 decimals, so equal
+   amounts have one digest however they were typed) and the three instants (through their text at
+   microsecond precision). It is checked for a first ticket before its round row is inserted, and
+   for every ticket against the round row before anything is paid; a mismatch aborts with "this is
+   not the round, or not the terms, this ticket was signed for — read the game again" and writes
+   nothing. So a re-term or a re-schedule that lands ahead of a purchase, a window re-opened at its
+   close, and a late purchase that would have become the next round's first ticket all end in a
+   refused purchase. `ticket-terms id` is the read-only view a client takes the digest from: the
+   round a ticket bought now would land in, selected as `buy` selects it, with `on-sale` (by the
+   clock, the game's `active` flag and its rounds-limit — not by tickets or ceiling left). The
+   bonus is not in the digest: it can only be added. A digest computed inside the purchase
+   transaction always matches and protects nothing — a client states the digest of what it showed.
+   Pinned by unit `EXPECT-0`..`EXPECT-5`, `EXPECT-N1`..`EXPECT-N14`, `EXPECT-GOLD`, `EXPECT-DEC`,
+   `EXPECT-SUBSEC`, `ONSALE-1`..`ONSALE-5c`, vision `VISION-EXPECT-1`..`VISION-EXPECT-7`, upgrade2
+   `U2-GAP`, `U2-EXPECT`, `U2-EXPECT-b`, `U2-JOIN`, `U2-JOIN-N`, `U2-TERMS`.
 2. **The pin.** At that first ticket the round writes `decide-height`, the number of the drand
    round that will decide it: `drand-round-for(draws-at) = round-at(draws-at +
    DRAND-MARGIN-SECONDS)`, with `DRAND-MARGIN-SECONDS` a constant of 180 s and `round-at` the
@@ -365,9 +386,9 @@ role only, `draw`) · `ESCAPED` (the drand round nobody drew with, and the money
 
 ## 10. Evidence
 
-**Tests.** `pact/tests/run-tests.sh` runs six suites — unit 412, vision 82, worst case 33,
-revenue 11, frozen 12 and upgrade 32 printed assertions (582 in all; 716 assertion forms in the
-six files, some inside `let` bodies that the REPL does not print) — after a static gate over every
+**Tests.** `pact/tests/run-tests.sh` runs seven suites — unit 447, vision 89, worst case 33,
+revenue 11, frozen 12, upgrade 32 and upgrade2 10 printed assertions (634 in all; more assertion
+forms exist, some inside `let` bodies that the REPL does not print) — after a static gate over every
 file, a check that no `or`/`and`/`+` takes three operands, a check that no `expect-failure` was
 written with too few arguments to assert why it failed, and a check that the frozen-module fixture
 is this module with only its governance replaced. Each suite is scored by its exit code, not by
@@ -417,6 +438,7 @@ with that added (worst case `WORST-3d2`, `WORST-3`, `WORST-3d`, `WORST-1a2`, `WO
 | the pilot, drawn and paid (previous version) | 7241470 | `GTevqUrZbdtq6A0c9bR9f0CH-H2WrtPjAadDk79EXMk` | 1,019 |
 | the Grand Opening, created with its schedule and bonus | 7243001 | `PsZtiJ4On1jwiODmzHpLdZcMLWc90Ccsddk54if1CgM` | 776 |
 | upgrade in place to the drand version (the precondition form plus the module) | 7274939 | `qJ_h9Bl4iYHrTk_2PVc37a-Ua82e4lu11pOswqzwZfg` | 101,271 |
+| second upgrade in place: a purchase states its round (the module alone) | 7279034 | `73n0HFjarozPhK6TMrtYTZyJHZ8SUoYTshBtMumNSdQ` | 66,289 |
 
 The two rounds drawn before the upgrade are worked through, with their deciding blocks
 (7241467 and 7266386) and the previous version's seed recipe, in [games/](../games/). No round has
@@ -428,9 +450,12 @@ yet been drawn from a drand beacon on mainnet.
   aggregation and the views); every such path is exercised by the suites.
 - Instants are shown to the second in the contract's messages; a sub-second instant is enforced
   exactly but printed truncated.
-- A round freezes the game's terms as they stand at its first ticket, so an operator re-term ordered
-  earlier in the same block reaches that round. `ROUND-OPENED` carries the frozen price and rake,
-  so a reader can see what the round actually froze.
+- A round freezes the game's terms as they stand at its first ticket, and the operator may still
+  change a game nobody has bought into at any moment. Since the second upgrade a purchase signed
+  for the earlier terms is then REFUSED (§3 step 1) rather than landed on the new ones; the
+  protection is the abort, not a block on the change, so an operator re-terming repeatedly makes
+  first-ticket purchases fail (its own game, nobody's money). It rests on the client stating the
+  digest of what it displayed.
 - **The `m:` refusal is by name.** `pool-guard` is public, so anyone can create a coin account under
   a name that does not start with `m:` and guard it with a game's module guard. Such an account can
   then be spent — by anyone, holding no key to it — only into tickets of ANY game, whose prizes and

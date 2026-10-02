@@ -35,6 +35,21 @@
       },
       "block_record": "no longer read by the contract",
       "_note": "Appended, never edited: the entries above this one describe the deploy of 2026-09-18 as they were written then."
+    },
+    {
+      "date": "2026-10-02",
+      "block": 7279034,
+      "request_key": "73n0HFjarozPhK6TMrtYTZyJHZ8SUoYTshBtMumNSdQ",
+      "gas": 66289,
+      "module_hash_on_chain": "iOQQPMLIE-2igYcP1AX3qWqVeNImhjVRi4s33CVPiEU",
+      "previous_module_hash": "ROPuVZ3uzJ2LOLdW-18obFpmmg7XehIV_sQ5H7Taw-s",
+      "schema_change": false,
+      "what": "A ticket purchase states the digest of the round and terms it was signed for (buy's fifth argument, expect) and is refused on any other. terms-digest and ticket-terms are new and read-only. No table, field or settlement changed.",
+      "digest_golden_vector": {
+        "call": "(terms-digest 1 1.0 0.05 [0.5 0.5] false 0 100.0 0.5 (time \"2026-09-20T17:10:00Z\") (time \"2026-09-20T17:30:00Z\") (time \"2026-09-20T17:40:00Z\"))",
+        "value": "6GrlP5iqn6OY_q-BDXOCasnOD0bpsbk5AS1WKkI2GU4"
+      },
+      "_note": "Appended, never edited."
     }
   ]
 }

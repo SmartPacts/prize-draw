@@ -9,8 +9,8 @@ affect a draw is below.
 > ## 🟢 DEPLOYED — Kadena mainnet (mainnet01)
 >
 > - Namespace `n_48867b242317a0216a67f8c7ca26696b5878e0e3`, module `prize-draw`, **chain 2**
-> - Module hash `ROPuVZ3uzJ2LOLdW-18obFpmmg7XehIV_sQ5H7Taw-s` (upgraded in place 2026-09-30; before that
->   `r1ecwafNL89gBUcstQ5GY4edqGOXq3HMWied_rOOhaI`)
+> - Module hash `iOQQPMLIE-2igYcP1AX3qWqVeNImhjVRi4s33CVPiEU` (upgraded in place twice: 2026-09-30, the
+>   beacon draw, and 2026-10-02, purchases that state their round — both in [`VERIFY.md`](VERIFY.md) §5)
 > - The module on chain is **byte for byte** the `(module …)` form in `pact/modules/prize-draw.pact`
 >   — check it yourself with [`VERIFY.md`](VERIFY.md), which takes about a minute.
 > - 🔴 **The contract is not frozen.** Until it is, any **2 of its 3 admin keys** hold *module
@@ -54,8 +54,8 @@ place. Where one is wrong, [`docs/PRIZE-DRAW-SPEC.md`](docs/PRIZE-DRAW-SPEC.md) 
 
 ```
 pact/modules/     the contract
-pact/tests/       six suites and the loader they share; run-tests.sh runs everything. One suite
-                  replays the previous mainnet version and the upgrade over it
+pact/tests/       seven suites and the loader they share; run-tests.sh runs everything. Two of
+                  them replay an earlier mainnet version and the upgrade over it
 pact/vendor/      the dependencies the tests load: the drand beacon verifier (a copy of the module
                   on chain), the block record the previous version read, and Kadena's coin +
                   fungible interfaces (not ours — see NOTICE)
@@ -83,7 +83,7 @@ you to trust a green tick that means less than you think. It runs the static gat
 checks that `or`, `and` and `+` are always given exactly two operands (Pact 5 refuses more only
 when the line runs), checks that no `expect-failure` was written with too few arguments to assert
 *why* something failed, proves the frozen-module fixture is this module with only its governance
-replaced, and then runs the six suites, scoring each by **exit code** rather than by grepping the
+replaced, and then runs the seven suites, scoring each by **exit code** rather than by grepping the
 transcript.
 
 ## How a winner is chosen
@@ -97,6 +97,11 @@ while a ticket can still be bought. Once drand publishes it, anyone — not only
 hash-pinned verifier module, and a forged, altered or wrong-round beacon is refused. The winners
 are a pure function of the round's key and that beacon; the contract never draws a round twice, and
 nobody can pick the winner.
+
+A ticket purchase states a digest of the round it was signed for — its number, price, fee, prize
+split, supply, prize ceiling, crank share and three instants — and the contract refuses it if the
+ticket would land in any other round or on any other terms. So a change to a game that lands
+while a purchase is on its way makes that purchase fail; it never changes what was bought.
 
 **What can still affect a draw, and what limits each one.** None of these lets anyone *pick* a
 winner.
