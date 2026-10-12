@@ -13,3 +13,8 @@ Corrections to the documentation, a test you think is missing, or a case where o
 recipe does not work on your machine — those are worth a pull request, and thank you.
 
 For anything you would rather not post in public, see [SECURITY.md](SECURITY.md).
+
+## What you send
+
+By sending a pull request you confirm that you hold the rights to the change and that Smart
+Pacts may use it under this repository's licence.
